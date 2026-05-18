@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>Data Preparation Guide</title>
+<style>
+:root{
+  --buff-gold:#CFB87C;--black:#000;--dark:#1f1f1f;--light:#F6F3EA;--white:#fff;
+  --ink:#191919;--muted:#5d6468;--code-bg:#111827;--code-head:#0b1220;--code-border:#2d3748;
+  --green:#0f766e;--red:#b91c1c;--orange:#b45309;--blue:#1d4ed8;--radius:18px;
+  --shadow:0 18px 45px rgba(0,0,0,.12);--max:1180px;
+}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--light);color:var(--ink);line-height:1.6;font-size:16px}
+a{color:#6b4e00;text-decoration:none;font-weight:700}.page{display:grid;grid-template-columns:300px minmax(0,1fr);min-height:100vh}
+.sidebar{position:sticky;top:0;height:100vh;background:linear-gradient(180deg,#000,#1f1f1f);color:#fff;padding:22px 18px;overflow:auto;border-right:6px solid var(--buff-gold)}
+.brand{display:flex;gap:12px;align-items:center;margin-bottom:20px}.logo{width:45px;height:45px;border-radius:14px;background:var(--buff-gold);display:grid;place-items:center;color:#000;font-weight:900}.brand h1{font-size:18px;line-height:1.15;margin:0}.brand p{font-size:12px;margin:4px 0 0;color:#ddd}
+.nav-title{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--buff-gold);margin:22px 0 10px;font-weight:800}.sidebar a{display:block;color:#fff;font-size:13px;padding:8px 10px;border-radius:10px;font-weight:700;text-decoration:none}.sidebar a:hover{background:rgba(207,184,124,.18)}
+.hero{background:radial-gradient(circle at 85% 20%,rgba(207,184,124,.35),transparent 30%),linear-gradient(135deg,#000 0%,#252525 55%,#4b3c18 100%);color:#fff;padding:54px 32px 34px}.hero-inner{max-width:var(--max);margin:0 auto}.eyebrow{display:inline-flex;border:1px solid rgba(207,184,124,.75);border-radius:999px;padding:6px 12px;color:var(--buff-gold);font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.hero h2{font-size:46px;line-height:1.05;margin:20px 0 14px;max-width:980px}.hero p{font-size:18px;max-width:920px;color:#f1f1f1;margin:0 0 20px}
+.hero-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:28px}.hero-card{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:var(--radius);padding:16px}.hero-card strong{display:block;color:var(--buff-gold);font-size:13px;text-transform:uppercase;letter-spacing:.06em}.hero-card span{display:block;font-size:14px;color:#eee;margin-top:5px}
+main{max-width:var(--max);margin:0 auto;padding:28px 32px 80px}.section{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:28px;margin:0 0 26px;border:1px solid rgba(0,0,0,.06)}.section.gold{background:linear-gradient(180deg,#fffaf0,#fff)}.section h2{font-size:30px;line-height:1.15;margin:0 0 12px;color:#111}.section h3{font-size:22px;margin:28px 0 8px}.lead{font-size:18px;color:#343434}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:22px}.three-col{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.callout{border-left:6px solid var(--buff-gold);background:#fbf7ea;border-radius:14px;padding:16px 18px;margin:18px 0}.callout.good{border-left-color:var(--green);background:#ecfdf5}.callout.warn{border-left-color:#f59e0b;background:#fff7ed}.callout.info{border-left-color:var(--blue);background:#eff6ff}.callout.bad{border-left-color:var(--red);background:#fef2f2}
+.config{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:16px}.field label{display:block;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;color:#333}.field input{width:100%;border:1px solid #d1d5db;border-radius:12px;padding:11px 12px;font-size:15px;background:#fff}.mini{font-size:13px;color:var(--muted);margin-top:6px}
+.choice-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}.choice-card{border:2px solid #e5e7eb;border-radius:18px;padding:18px;background:#fff;cursor:pointer;transition:.18s ease}.choice-card:hover{transform:translateY(-2px)}.choice-card.active{border-color:var(--buff-gold);box-shadow:0 12px 26px rgba(207,184,124,.25);background:#fffaf0}
+.button-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:15px}.btn{appearance:none;border:0;border-radius:999px;background:#111;color:#fff;font-weight:900;padding:10px 16px;cursor:pointer}.btn.gold{background:var(--buff-gold);color:#000}.btn.light{background:#f3f4f6;color:#111}
+.code-card{margin:16px 0;border:1px solid var(--code-border);border-radius:16px;overflow:hidden;background:var(--code-bg)}.code-head{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--code-head);color:#fff;padding:10px 12px;border-bottom:1px solid var(--code-border)}.code-title{font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#e5e7eb}.copy{border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:#fff;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:800;cursor:pointer}.copy:hover{background:rgba(255,255,255,.18)}
+pre{margin:0;padding:16px;overflow:auto;color:#e5e7eb;font-size:14px;line-height:1.5;tab-size:2;white-space:pre}code{font-family:Menlo,Consolas,Monaco,monospace}.inline-code{font-family:Menlo,Consolas,Monaco,monospace;background:#f1f5f9;border:1px solid #e5e7eb;border-radius:7px;padding:2px 5px;font-size:.92em}
+.table-wrap{overflow:auto;border:1px solid #e5e7eb;border-radius:16px;margin:14px 0}table{width:100%;border-collapse:collapse;background:#fff}th,td{text-align:left;padding:11px 12px;border-bottom:1px solid #e5e7eb;vertical-align:top}th{background:#111;color:#fff;font-size:13px;text-transform:uppercase;letter-spacing:.05em}.is-hidden{display:none!important}
+@media(max-width:980px){.page{display:block}.sidebar{position:relative;height:auto}.hero-grid,.two-col,.three-col,.config,.choice-grid{grid-template-columns:1fr}.hero h2{font-size:34px}main{padding:22px 16px}.hero{padding:38px 18px 28px}.section{padding:22px}}
+@media print{.sidebar,.button-row,.copy{display:none}.page{display:block}.hero{background:#fff;color:#000;padding:20px}.hero p{color:#111}.section{box-shadow:none;break-inside:avoid}body{background:#fff}pre{white-space:pre-wrap}}
+
+.learning-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:18px 0}
+.learning-card{border:1px solid #e5e7eb;background:#f8fafc;border-radius:16px;padding:16px}
+.learning-card h3{font-size:18px;margin:0 0 8px;color:#111}
+.learning-card p{margin:0 0 8px}
+.step-list{counter-reset:step;display:grid;gap:12px;margin:18px 0}
+.step-item{counter-increment:step;background:#f8fafc;border:1px solid #e5e7eb;border-radius:16px;padding:14px 16px}
+.step-item:before{content:counter(step);display:inline-grid;place-items:center;width:26px;height:26px;border-radius:999px;background:#111;color:#fff;font-weight:900;margin-right:8px}
+.resource-list{display:grid;gap:10px;margin:16px 0}
+.resource-list a{display:block;background:#fffaf0;border:1px solid rgba(207,184,124,.6);border-radius:14px;padding:12px 14px;color:#5b4300;text-decoration:none}
+.resource-list a:hover{text-decoration:underline}
+.example-output{background:#0f172a;color:#c7f9cc;border-radius:16px;padding:14px 16px;overflow:auto}
+.vocab{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.vocab div{background:#f8fafc;border:1px solid #e5e7eb;border-radius:14px;padding:12px}
+.vocab strong{display:block;color:#111;margin-bottom:4px}
+@media(max-width:980px){.learning-grid,.vocab{grid-template-columns:1fr}}
+
+</style>
+</head>
+<body>
+<div class="page">
+<aside class="sidebar">
+<div class="brand"><h1>Data Preparation Guide</h1></div>
+<div class="nav-title">Start</div>
+<a href="#config">Customize paths</a>
+<a href="#overview">Processing overview</a>
+<a href="#terminal-rules">Terminal rules</a>
+<a href="#big-picture">Big picture</a>
+<a href="#file-roadmap">File roadmap</a><a href="#processing-commands">Processing commands</a>
+
+<a href="#resources">Helpful links</a>
+<div class="nav-title" data-mode-link="msc">MSC data</div>
+<a data-mode-link="msc" href="#aws-install">Install AWS CLI</a>
+<a data-mode-link="msc" href="#msc-download">Download MSC subjects</a>
+<a data-mode-link="msc" href="#msc-verify">Verify download</a>
+<div class="nav-title">HCP and FSL</div>
+<a href="#env">Load HCP environment</a>
+<a data-mode-link="msc" href="#msc-fc">MSC to FC-ready script</a>
+<a data-mode-link="msc" href="#slurm">Run with SLURM</a>
+<div class="nav-title" data-mode-link="own">Own data</div>
+<a data-mode-link="own" href="#own-files">Own-data requirements</a>
+<a data-mode-link="own" href="#own-hcp">Full HCP template</a>
+<div class="nav-title">Finish</div>
+<a href="#outputs">Expected outputs</a>
+<a href="#cleanup">Clean accidental bad paths</a>
+<a href="#cheatsheet">Cheat sheet</a>
+<a href="#troubleshooting">Troubleshooting</a>
+
+</aside>
+<div class="content">
+<header class="hero">
+<div class="hero-inner">
+<span class="eyebrow">Neuroimaging data preparation</span>
+<h2>Data Preparation Guide</h2>
+<p>Prepare resting-state fMRI data for functional connectivity analysis and download one task fMRI run for later PPI analysis using AWS, HCP-style folders, FSL, FreeSurfer, and Workbench.</p>
+<div class="hero-grid">
+<div class="hero-card"><strong>Mode</strong><span id="heroInput">MSC sample data or your own data</span></div>
+<div class="hero-card"><strong>Download</strong><span>OpenNeuro public S3</span></div>
+<div class="hero-card"><strong>Tools</strong><span>HCP-style folders, FSL, FreeSurfer</span></div>
+<div class="hero-card"><strong>Output</strong><span>FC-ready rest BOLD plus task data for PPI</span></div>
+</div>
+</div>
+</header>
+<main>
+<section class="section gold" id="config">
+<h2>Customize paths</h2>
+<p class="lead">Choose the MSC sample path or your own data path. The commands use placeholders such as <span class="inline-code">__USER__</span> internally, so they will not create broken paths like <span class="inline-code">$/scratch/...</span>.</p>
+<div class="choice-grid">
+<div class="choice-card active" data-set-mode="msc" tabindex="0"><strong>Use Midnight Scan Club sample data</strong><p>Install AWS CLI, download OpenNeuro ds000224, verify files, then run the HCP-style FSL path to FC-ready data.</p></div>
+<div class="choice-card" data-set-mode="own" tabindex="0"><strong>Use my own data</strong><p>Use the full HCP template with your own T1w, T2w, BOLD, SBRef, and fieldmap or spin-echo files.</p></div>
+</div>
+<input data-var="DATA_MODE" id="dataMode" type="hidden" value="msc"/>
+<div class="config">
+<div class="field"><label>Username or Identikey</label><input data-var="USER" id="userName" value="jade6100"/><div class="mini">Used for scratch paths.</div></div>
+<div class="field"><label>Software directory</label><input data-var="SOFTWARE_DIR" value="/scratch/alpine/__USER__/software"/></div>
+<div class="field" data-mode-field="msc"><label>MSC root</label><input data-var="MSC_ROOT" value="/scratch/alpine/__USER__/openneuro"/></div>
+<div class="field" data-mode-field="msc"><label>MSC BIDS directory</label><input data-var="MSC_BIDS_DIR" value="__MSC_ROOT__/ds000224"/></div>
+<div class="field" data-mode-field="msc"><label>MSC subjects</label><input data-var="MSC_SUBJECTS" value="sub-MSC01 sub-MSC02 sub-MSC03 sub-MSC04 sub-MSC05"/></div>
+<div class="field"><label>FSLDIR</label><input data-var="FSLDIR" value="/projects/ics/software/fsl/6.0.7"/></div>
+<div class="field"><label>FREESURFER_HOME</label><input data-var="FREESURFER_HOME" value="/projects/ics/software/freesurfer/6.0.1"/></div>
+<div class="field"><label>HCPPIPEDIR</label><input data-var="HCPPIPEDIR" value="/projects/ics/software/hcp_pipeline/HCP_Pipelines-3.4.0"/></div>
+<div class="field"><label>CARET7DIR</label><input data-var="CARET7DIR" value="/projects/ics/software/hcp_pipeline/caret_workbench/bin_rh_linux64"/></div>
+</div>
+<div class="button-row">
+<button class="btn gold" id="applyBtn">Update commands</button>
+<button class="btn light" id="resetBtn">Reset example values</button>
+<button class="btn" onclick="window.print()">Print or save as PDF</button>
+</div>
+</section>
+<section class="section" id="overview">
+<h2>Processing overview</h2>
+<div class="table-wrap"><table><thead><tr><th>Step</th><th>What happens</th><th>Why it matters</th></tr></thead><tbody>
+<tr><td>1. Install AWS CLI</td><td>Installs <span class="inline-code">aws</span> into scratch.</td><td>Needed to pull OpenNeuro data from public S3.</td></tr>
+<tr><td>2. Download MSC</td><td>Pulls dataset metadata, T1w files, rest BOLD files, one glasslexical task BOLD run, JSONs, events TSVs, and scans TSVs.</td><td>Gives you real raw data for functional connectivity now and task data for later PPI work.</td></tr>
+<tr><td>3. Verify files</td><td>Uses <span class="inline-code">find</span>, <span class="inline-code">fslinfo</span>, and <span class="inline-code">fslnvols</span>.</td><td>Confirms images are present and readable.</td></tr>
+<tr><td>4. Load HCP/FSL</td><td>Loads FSL, FreeSurfer, HCP scripts, and Workbench.</td><td>Sets the environment for the processing scripts.</td></tr>
+<tr><td>5. Process to FC-ready</td><td>Stages HCP-style folders, runs FSL preprocessing and registration, writes cleaned 4D BOLD.</td><td>Creates files for seed-based FC, ROI-to-ROI FC, and graph theory.</td></tr>
+</tbody></table></div>
+<div class="callout info"><strong>MSC note:</strong> the MSC subset used here has T1w, rest BOLD, and one glasslexical task run. Rest BOLD is used for functional connectivity. The task run is downloaded and verified now so it can be used later for PPI, where connectivity is modeled in relation to task events. The subset does not include the full T2w, fieldmap, and SBRef setup needed for the official full HCP minimal pipeline, so the MSC path uses the practical HCP-style FSL route.</div>
+</section>
+<section class="section" id="terminal-rules">
+<h2>Terminal rules</h2>
+<div class="three-col">
+<div class="callout good"><strong>Paste only commands</strong><br/>Do not paste prompt text like <span class="inline-code">(base) [user@login ~]$</span>.</div>
+<div class="callout warn"><strong>Never add a dollar sign before paths</strong><br/>Use <span class="inline-code">/scratch/alpine/...</span>, not <span class="inline-code">$/scratch/alpine/...</span>.</div>
+<div class="callout info"><strong>Run one block at a time</strong><br/>Check each output before moving to the next section.</div>
+</div>
+</section>
+<section class="section" id="big-picture">
+<h2>Big picture: what this tutorial is trying to accomplish</h2>
+<p class="lead">The goal is to take raw resting-state fMRI data and produce a cleaned 4D BOLD file that you can use for functional connectivity analyses. Functional connectivity asks whether the BOLD signal in one brain region rises and falls with the BOLD signal in another brain region across time. To do that responsibly, the data need to be organized, readable, motion-corrected, spatially aligned, and cleaned enough for time-series analysis.</p>
+<div class="learning-grid">
+<div class="learning-card">
+<h3>Where we start</h3>
+<p>We begin with OpenNeuro Midnight Scan Club data in a BIDS-like folder structure. The important files for this tutorial are anatomical T1w images, resting-state BOLD files, and one glasslexical task BOLD run that can be used later for PPI examples.</p>
+<p>The T1w image gives us a high-resolution structural reference. The resting BOLD file gives us a 4D time series for functional connectivity. The task BOLD file gives us a later example where connectivity can be modeled in relation to task events.</p>
+</div>
+<div class="learning-card">
+<h3>Where we end</h3>
+<p>The main endpoint is <span class="inline-code">bold_fc_ready_mni.nii.gz</span>. This is a cleaned 4D BOLD file in MNI space.</p>
+<p>Once that file exists, you can extract seed time series, average signal within atlas parcels, compute correlation matrices, and move into graph theory analyses.</p>
+</div>
+<div class="learning-card">
+<h3>Why HCP-style folders?</h3>
+<p>The HCP pipelines expect a particular folder style, especially folders such as <span class="inline-code">unprocessed/3T</span>, <span class="inline-code">T1w</span>, and <span class="inline-code">MNINonLinear</span>. Even when this tutorial uses a practical FSL route for the MSC subset, keeping an HCP-style structure makes the workflow easier to understand and easier to extend later.</p>
+</div>
+<div class="learning-card">
+<h3>Why the MSC path is practical rather than fully official</h3>
+<p>The sample MSC download used here gives us T1w, resting-state BOLD files, and one task BOLD run, but it does not provide the full set of T2w, SBRef, and distortion-correction inputs that the official full HCP minimal preprocessing path expects. The tutorial therefore uses a practical HCP-style/FSL workflow for the MSC sample data and keeps a fuller HCP template for datasets that do have the required inputs.</p>
+</div>
+</div>
+
+</section>
+<section class="section" id="file-roadmap">
+<h2>File roadmap: what the main folders mean</h2>
+<p>This workflow creates and uses several folders. Understanding these folders helps you debug errors and recognize whether they are working with raw data, staged data, or processed data.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Path or folder</th><th>What it contains</th><th>How to think about it</th></tr></thead>
+<tbody>
+<tr><td><span class="inline-code">/scratch/alpine/&lt;user&gt;/software</span></td><td>AWS CLI and other locally installed tools.</td><td>This is your personal software folder on scratch. It avoids needing system-wide installation privileges.</td></tr>
+<tr><td><span class="inline-code">/scratch/alpine/&lt;user&gt;/openneuro/ds000224</span></td><td>Downloaded Midnight Scan Club data.</td><td>This is the raw data folder. Do not edit these files by hand.</td></tr>
+<tr><td><span class="inline-code">hcp_scripts</span></td><td>The shell scripts created by this tutorial.</td><td>This is where the reusable commands live. You can rerun these scripts instead of pasting everything again.</td></tr>
+<tr><td><span class="inline-code">hcp_outputs</span></td><td>HCP-style staged anatomical and functional folders.</td><td>This is the bridge between raw BIDS-style files and processing output.</td></tr>
+<tr><td><span class="inline-code">fc_ready</span></td><td>Final cleaned BOLD files and intermediate QC files.</td><td>This is the folder you should use for functional connectivity analyses.</td></tr>
+</tbody>
+</table>
+</div>
+<div class="callout warn">
+<strong>Common mistake:</strong> if a path starts with <span class="inline-code">$/scratch</span>, it is wrong. A correct absolute path starts directly with <span class="inline-code">/scratch</span>.
+</div>
+</section>
+<section class="section" id="processing-commands"><h2>Processing commands and what they do</h2><p>Use this section as a reference while running the code blocks. It explains the main command calls in the scripts and why each one appears in the data preparation steps.</p><div class="table-wrap"><table><thead><tr><th>Command or call</th><th>Where it appears</th><th>What it does</th></tr></thead><tbody><tr><td><span class="inline-code">aws s3 sync</span></td><td>Download section</td><td>Copies selected files from the public OpenNeuro S3 bucket into your scratch directory. The exclude and include rules keep the download focused on T1w anatomy, resting-state BOLD, one task BOLD run, events files, and metadata.</td></tr><tr><td><span class="inline-code">find</span></td><td>Verification and script checks</td><td>Searches folders for files that match a pattern, such as T1w images or resting BOLD images. This helps confirm that the expected files exist before processing starts.</td></tr><tr><td><span class="inline-code">fslinfo</span></td><td>Verification</td><td>Prints NIfTI header information, including image dimensions, voxel size, and the number of time points for 4D BOLD files.</td></tr><tr><td><span class="inline-code">fslnvols</span></td><td>Verification and final output checks</td><td>Reports the number of volumes in a 4D BOLD file. This is useful after dropping the first <span class="inline-code">5</span> volumes and confirming the final time-series length.</td></tr><tr><td><span class="inline-code">fslroi</span></td><td>Functional preparation</td><td>Extracts part of a NIfTI image. In this guide, <span class="inline-code">fslroi input output 5 -1</span> removes the first five resting-state volumes and keeps the rest of the run.</td></tr><tr><td><span class="inline-code">fslmaths</span></td><td>Functional preparation and cleanup</td><td>Runs image math operations. The scripts use it to create mean images, apply masks, run <span class="inline-code">-bptf 22.7 2.27</span> temporal filtering, and write final cleaned BOLD outputs. With <span class="inline-code">TR=2.2</span>, this is approximately 0.01 to 0.10 Hz.</td></tr><tr><td><span class="inline-code">robustfov</span></td><td>Structural preparation</td><td>Crops the anatomical image to a cleaner field of view before registration.</td></tr><tr><td><span class="inline-code">bet</span></td><td>Structural and functional preparation</td><td>Estimates a brain mask and removes non-brain tissue from anatomical or mean functional images.</td></tr><tr><td><span class="inline-code">mcflirt</span></td><td>Functional preparation</td><td>Runs motion correction by aligning BOLD volumes across time and writing motion parameter files.</td></tr><tr><td><span class="inline-code">flirt</span></td><td>Registration</td><td>Runs linear registration. The script uses <span class="inline-code">flirt -dof 12</span> for T1w-to-MNI affine registration and <span class="inline-code">flirt -dof 6</span> for BOLD-to-T1w rigid-body registration. No nonlinear registration is used in the practical MSC route.</td></tr><tr><td><span class="inline-code">convert_xfm</span></td><td>Registration</td><td>Combines or inverts transformation matrices so BOLD data can be moved through the correct registration path.</td></tr><tr><td><span class="inline-code">fsl_regfilt</span></td><td>Motion cleanup</td><td>Regresses motion parameters out of the BOLD time series when the motion parameter file exists.</td></tr><tr><td><span class="inline-code">source</span></td><td>Environment setup</td><td>Loads environment scripts so command-line tools are available in the current shell session.</td></tr><tr><td><span class="inline-code">export</span></td><td>Environment setup</td><td>Sets variables such as username, input paths, output paths, and software locations so the scripts can reuse them safely.</td></tr><tr><td><span class="inline-code">sbatch</span></td><td>SLURM section</td><td>Submits the processing script as a scheduled cluster job after the one-subject interactive test works.</td></tr></tbody></table></div></section>
+<section class="section" id="resources">
+<h2>Helpful links for learning more</h2>
+<p>These links are meant for you if you want to understand the tools, file formats, and analysis logic behind the tutorial.</p>
+<div class="resource-list">
+<a href="https://www.humanconnectome.org/software/hcp-mr-pipelines" rel="noopener" target="_blank">HCP MR Pipelines reference, overview of the Human Connectome Project processing pipelines</a>
+<a href="https://github.com/Washington-University/HCPpipelines" rel="noopener" target="_blank">HCP Pipelines GitHub repository, scripts and examples from Washington University</a>
+<a href="https://fsl.fmrib.ox.ac.uk/fsl/docs/" rel="noopener" target="_blank">FSL documentation, main documentation for FSL tools</a>
+<a href="https://fsl.fmrib.ox.ac.uk/fsl/docs/registration/mcflirt.html" rel="noopener" target="_blank">FSL MCFLIRT documentation, motion correction for fMRI time series</a>
+<a href="https://fsl.fmrib.ox.ac.uk/fsl/docs/registration/flirt/index.html" rel="noopener" target="_blank">FSL FLIRT documentation, linear image registration</a>
+<a href="https://fsl.fmrib.ox.ac.uk/fsl/docs/structural/bet.html" rel="noopener" target="_blank">FSL BET documentation, brain extraction</a>
+<a href="https://openneuro.org/" rel="noopener" target="_blank">OpenNeuro, public neuroimaging datasets</a>
+<a href="https://openneuro.freshdesk.com/support/solutions/articles/29000023186-issues-with-downloading-datasets" rel="noopener" target="_blank">OpenNeuro helpdesk, downloading datasets with AWS S3</a>
+<a href="https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html" rel="noopener" target="_blank">AWS CLI install guide for Linux and other systems</a>
+<a href="https://bids-specification.readthedocs.io/en/stable/" rel="noopener" target="_blank">BIDS specification, the standard used to organize neuroimaging datasets</a>
+</div>
+</section>
+<section class="section" data-mode-section="msc" id="aws-install">
+<h2>1. Install AWS CLI in scratch</h2>
+<p>This installs AWS CLI v2 and avoids the interactive unzip overwrite problem.</p>
+<div class="learning-grid">
+<div class="learning-card">
+<h3>What this step is doing</h3>
+<p>The AWS CLI is a command-line tool that can copy files from public S3 buckets. OpenNeuro exposes datasets through public S3, so this lets us download only the files we need instead of clicking through a browser.</p>
+</div>
+<div class="learning-card">
+<h3>Why we install it in scratch</h3>
+<p>You usually do not have permission to install software globally on the server. Installing into <span class="inline-code">/scratch/alpine/&lt;user&gt;/software</span> gives each person a local copy they can run.</p>
+</div>
+</div>
+<div class="callout warn">
+<strong>Important:</strong> the script removes old <span class="inline-code">aws</span> installer files before unzipping. This prevents the interactive prompt that asks whether to replace files.
+</div>
+<div class="example-output"><pre>Expected useful output:
+AWS CLI installed:
+/scratch/alpine/jade6100/software/bin/aws
+aws-cli/2.x.x ...</pre></div>
+<div class="code-card">
+<div class="code-head"><span class="code-title">Create and run 01_install_aws_cli.sh</span><button class="copy">Copy</button></div>
+<pre><code class="template">mkdir -p /scratch/alpine/__USER__/openneuro/hcp_scripts
+cat &gt; /scratch/alpine/__USER__/openneuro/hcp_scripts/01_install_aws_cli.sh &lt;&lt;'BASH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+###############################################################################
+# 01_install_aws_cli.sh
+# Install AWS CLI v2 into scratch.
+#
+# Why this exists:
+#   The OpenNeuro Midnight Scan Club data are downloaded from public S3.
+#   You do not need an AWS account, but you do need the AWS CLI command.
+###############################################################################
+
+export USERNAME="${USERNAME:-jade6100}"
+export SOFTWARE_DIR="${SOFTWARE_DIR:-/scratch/alpine/${USERNAME}/software}"
+export BIN_DIR="${BIN_DIR:-${SOFTWARE_DIR}/bin}"
+export AWS_INSTALL_DIR="${AWS_INSTALL_DIR:-${SOFTWARE_DIR}/aws-cli}"
+
+mkdir -p "${SOFTWARE_DIR}" "${BIN_DIR}"
+cd "${SOFTWARE_DIR}"
+
+echo "Installing AWS CLI into:"
+echo "  ${AWS_INSTALL_DIR}"
+echo "Binary link will be:"
+echo "  ${BIN_DIR}/aws"
+echo
+
+# Remove old installer files so unzip does not ask:
+# replace aws/README.md? [y]es, [n]o, [A]ll...
+rm -rf aws awscliv2.zip
+
+echo "Downloading AWS CLI v2 installer..."
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
+
+echo "Unzipping AWS CLI installer..."
+unzip -q awscliv2.zip
+
+echo "Running AWS installer..."
+./aws/install \
+  --install-dir "${AWS_INSTALL_DIR}" \
+  --bin-dir "${BIN_DIR}" \
+  --update
+
+export PATH="${BIN_DIR}:${PATH}"
+
+echo
+echo "AWS CLI installed:"
+which aws
+aws --version
+BASH
+chmod +x /scratch/alpine/__USER__/openneuro/hcp_scripts/01_install_aws_cli.sh
+
+export USERNAME="__USER__"
+bash /scratch/alpine/__USER__/openneuro/hcp_scripts/01_install_aws_cli.sh</code></pre>
+</div>
+</section>
+<section class="section" data-mode-section="msc" id="msc-download">
+<h2>2. Download Midnight Scan Club subjects</h2>
+<p>This downloads five subjects by default. It pulls resting-state BOLD for functional connectivity and one glasslexical task run for later PPI examples. You can change the subject list above.</p>
+<div class="learning-grid">
+<div class="learning-card">
+<h3>Why we use include and exclude rules</h3>
+<p>The full dataset is larger than what you need for this tutorial. The command first excludes everything, then includes only dataset metadata, T1w anatomy, rest BOLD files, one glasslexical task BOLD run, JSON sidecars, event files, and scan logs.</p>
+</div>
+<div class="learning-card">
+<h3>What the JSON sidecars do</h3>
+<p>JSON files store acquisition metadata. For BOLD data, this often includes timing or sequence information. Even when a script does not use every JSON field, downloading sidecars keeps the dataset interpretable.</p>
+</div>
+</div>
+<div class="callout info">
+<strong>Why public S3 works:</strong> the command uses <span class="inline-code">--no-sign-request</span>, which tells AWS CLI not to look for private credentials.
+</div>
+<div class="example-output"><pre>Expected useful output:
+Downloading sub-MSC01
+Downloading sub-MSC02
+...
+Download complete.
+T1w count: 20
+Rest BOLD count: 50
+Glasslexical task BOLD count: 50
+Glasslexical events count: 50</pre></div>
+<div class="code-card">
+<div class="code-head"><span class="code-title">Create and run 02_download_msc_openneuro.sh</span><button class="copy">Copy</button></div>
+<pre><code class="template">mkdir -p /scratch/alpine/__USER__/openneuro/hcp_scripts
+cat &gt; /scratch/alpine/__USER__/openneuro/hcp_scripts/02_download_msc_openneuro.sh &lt;&lt;'BASH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+###############################################################################
+# 02_download_msc_openneuro.sh
+# Download Midnight Scan Club sample data from OpenNeuro.
+#
+# Default:
+#   5 subjects, sub-MSC01 through sub-MSC05
+#   dataset-level files
+#   T1w anatomy files
+#   rest BOLD files
+#   one glasslexical task BOLD run for later PPI
+#   JSON sidecars
+#   events.tsv files
+#   scans.tsv files
+#
+# Uses public unsigned S3 access, so no AWS account is required.
+###############################################################################
+
+export USERNAME="${USERNAME:-jade6100}"
+export MSC_ROOT="${MSC_ROOT:-/scratch/alpine/${USERNAME}/openneuro}"
+export MSC_BIDS_DIR="${MSC_BIDS_DIR:-${MSC_ROOT}/ds000224}"
+export MSC_SUBJECTS="${MSC_SUBJECTS:-sub-MSC01 sub-MSC02 sub-MSC03 sub-MSC04 sub-MSC05}"
+
+export PATH="/scratch/alpine/${USERNAME}/software/bin:${HOME}/.local/bin:${PATH}"
+
+if ! command -v aws &gt;/dev/null 2&gt;&amp;1; then
+  echo "ERROR: aws was not found."
+  echo "Run 01_install_aws_cli.sh first, then run this script again."
+  echo "Expected location:"
+  echo "/scratch/alpine/${USERNAME}/software/bin/aws"
+  exit 1
+fi
+
+echo "AWS CLI:"
+which aws
+aws --version
+echo
+
+mkdir -p "${MSC_ROOT}"
+cd "${MSC_ROOT}"
+mkdir -p ds000224
+
+echo "Testing public OpenNeuro access..."
+# Do not let head create a strict-mode broken pipe failure.
+set +o pipefail
+aws s3 ls --no-sign-request s3://openneuro.org/ds000224/ | head
+set -o pipefail
+echo
+
+echo "Downloading dataset-level metadata..."
+aws s3 sync --no-sign-request s3://openneuro.org/ds000224 ./ds000224 \
+  --exclude "*" \
+  --include ".bidsignore" \
+  --include "dataset_description.json" \
+  --include "README" \
+  --include "CHANGES" \
+  --include "participants.tsv" \
+  --include "participants.json" \
+  --include "T1w.json" \
+  --include "task-rest_bold.json" \
+  --include "task-glasslexical_bold.json"
+
+echo
+echo "Downloading selected MSC subjects..."
+for sub in ${MSC_SUBJECTS}; do
+  echo
+  echo "============================================================"
+  echo "Downloading ${sub}"
+  echo "============================================================"
+
+  aws s3 sync --no-sign-request s3://openneuro.org/ds000224 ./ds000224 \
+    --exclude "*" \
+    --include "${sub}/ses-struct*/anat/*_T1w.nii.gz" \
+    --include "${sub}/ses-struct*/anat/*_T1w.json" \
+    --include "${sub}/ses-struct*/${sub}_ses-struct*_scans.tsv" \
+    --include "${sub}/ses-func*/func/*task-rest_bold.nii.gz" \
+    --include "${sub}/ses-func*/func/*task-rest_bold.json" \
+    --include "${sub}/ses-func*/func/*task-rest_events.tsv" \
+    --include "${sub}/ses-func*/func/*task-glasslexical_run-01_bold.nii.gz" \
+    --include "${sub}/ses-func*/func/*task-glasslexical_run-01_bold.json" \
+    --include "${sub}/ses-func*/func/*task-glasslexical_run-01_events.tsv" \
+    --include "${sub}/ses-func*/${sub}_ses-func*_scans.tsv"
+done
+
+echo
+echo "Download complete."
+echo "BIDS directory: ${MSC_BIDS_DIR}"
+echo
+
+echo "Counts:"
+echo -n "T1w count: "
+find "${MSC_BIDS_DIR}" -name "*_T1w.nii.gz" | sort | wc -l
+
+echo -n "Rest BOLD count: "
+find "${MSC_BIDS_DIR}" -name "*task-rest_bold.nii.gz" | sort | wc -l
+
+echo -n "Glasslexical task BOLD count: "
+find "${MSC_BIDS_DIR}" -name "*task-glasslexical_run-01_bold.nii.gz" | sort | wc -l
+
+echo -n "Glasslexical events count: "
+find "${MSC_BIDS_DIR}" -name "*task-glasslexical_run-01_events.tsv" | sort | wc -l
+
+echo
+echo "First rest BOLD files:"
+find "${MSC_BIDS_DIR}" -name "*task-rest_bold.nii.gz" | sort | head -10
+
+echo
+echo "First glasslexical task BOLD files:"
+find "${MSC_BIDS_DIR}" -name "*task-glasslexical_run-01_bold.nii.gz" | sort | head -10
+
+echo
+echo "First glasslexical events files:"
+find "${MSC_BIDS_DIR}" -name "*task-glasslexical_run-01_events.tsv" | sort | head -10
+BASH
+chmod +x /scratch/alpine/__USER__/openneuro/hcp_scripts/02_download_msc_openneuro.sh
+
+export USERNAME="__USER__"
+export MSC_ROOT="__MSC_ROOT__"
+export MSC_BIDS_DIR="__MSC_BIDS_DIR__"
+export MSC_SUBJECTS="__MSC_SUBJECTS__"
+bash /scratch/alpine/__USER__/openneuro/hcp_scripts/02_download_msc_openneuro.sh</code></pre>
+</div>
+</section>
+<section class="section" data-mode-section="msc" id="msc-verify">
+<h2>3. Verify the MSC download</h2>
+<p>This block fixes the path issue you hit. It uses <span class="inline-code">/scratch/...</span>, not <span class="inline-code">$/scratch/...</span>.</p>
+<div class="learning-grid">
+<div class="learning-card">
+<h3>Why verification comes before preprocessing</h3>
+<p>Preprocessing errors are hard to interpret if we do not first know whether the files exist, whether the path is correct, and whether FSL can read the images. Verification separates download problems from processing problems.</p>
+</div>
+<div class="learning-card">
+<h3>What fslinfo tells us</h3>
+<p><span class="inline-code">fslinfo</span> prints image dimensions, voxel size, number of volumes, data type, and TR-related header information. For a BOLD file, <span class="inline-code">dim4</span> is the number of time points.</p>
+</div>
+</div>
+<div class="callout good">
+<strong>What good output looks like:</strong> the current folder should be <span class="inline-code">/scratch/alpine/&lt;user&gt;/openneuro/ds000224</span>, not a folder under <span class="inline-code">/home/&lt;user&gt;/$/scratch</span>.
+</div>
+<div class="code-card">
+<div class="code-head"><span class="code-title">Create and run 03_verify_msc_download.sh</span><button class="copy">Copy</button></div>
+<pre><code class="template">mkdir -p /scratch/alpine/__USER__/openneuro/hcp_scripts
+cat &gt; /scratch/alpine/__USER__/openneuro/hcp_scripts/03_verify_msc_download.sh &lt;&lt;'BASH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+###############################################################################
+# 03_verify_msc_download.sh
+# Verify that MSC files downloaded correctly and are readable by FSL.
+###############################################################################
+
+export USERNAME="${USERNAME:-jade6100}"
+export MSC_BIDS_DIR="${MSC_BIDS_DIR:-/scratch/alpine/${USERNAME}/openneuro/ds000224}"
+export FSLDIR="${FSLDIR:-/projects/ics/software/fsl/6.0.7}"
+
+export PATH="${FSLDIR}/bin:${FSLDIR}/share/fsl/bin:${PATH}"
+source "${FSLDIR}/etc/fslconf/fsl.sh" 2&gt;/dev/null || true
+
+if ! command -v fslinfo &gt;/dev/null 2&gt;&amp;1; then
+  echo "ERROR: fslinfo was not found."
+  echo "FSLDIR=${FSLDIR}"
+  echo "Check this path:"
+  echo "${FSLDIR}/share/fsl/bin/fslinfo"
+  exit 1
+fi
+
+if [[ ! -d "${MSC_BIDS_DIR}" ]]; then
+  echo "ERROR: MSC_BIDS_DIR does not exist:"
+  echo "${MSC_BIDS_DIR}"
+  echo "Run 02_download_msc_openneuro.sh first."
+  exit 1
+fi
+
+cd "${MSC_BIDS_DIR}"
+
+echo "Current folder:"
+pwd
+echo
+
+echo "Dataset-level files:"
+ls -lah dataset_description.json participants.tsv task-rest_bold.json 2&gt;/dev/null || true
+echo
+
+echo "T1w count:"
+find . -name "*_T1w.nii.gz" | sort | tee /tmp/msc_t1w_files.txt | wc -l
+echo
+
+echo "Rest BOLD count:"
+find . -name "*task-rest_bold.nii.gz" | sort | tee /tmp/msc_rest_bold_files.txt | wc -l
+echo
+
+echo "Glasslexical task BOLD count:"
+find . -name "*task-glasslexical_run-01_bold.nii.gz" | sort | tee /tmp/msc_task_bold_files.txt | wc -l
+echo
+
+echo "Glasslexical events count:"
+find . -name "*task-glasslexical_run-01_events.tsv" | sort | tee /tmp/msc_task_events_files.txt | wc -l
+echo
+
+n_t1w=$(wc -l &lt; /tmp/msc_t1w_files.txt)
+n_bold=$(wc -l &lt; /tmp/msc_rest_bold_files.txt)
+n_task_bold=$(wc -l &lt; /tmp/msc_task_bold_files.txt)
+
+if [[ "${n_t1w}" -eq 0 ]]; then
+  echo "ERROR: No T1w files found."
+  echo "Run the download script first."
+  exit 1
+fi
+
+if [[ "${n_bold}" -eq 0 ]]; then
+  echo "ERROR: No rest BOLD files found."
+  echo "Run the download script first."
+  exit 1
+fi
+
+if [[ "${n_task_bold}" -eq 0 ]]; then
+  echo "WARNING: No glasslexical task BOLD files found."
+  echo "Rest processing can still continue, but later PPI examples will need task BOLD and events files."
+fi
+
+echo "First T1w files:"
+head -20 /tmp/msc_t1w_files.txt
+echo
+
+echo "First rest BOLD files:"
+head -20 /tmp/msc_rest_bold_files.txt
+echo
+
+echo "First glasslexical task BOLD files:"
+head -20 /tmp/msc_task_bold_files.txt
+echo
+
+echo "First glasslexical events files:"
+head -20 /tmp/msc_task_events_files.txt
+echo
+
+echo "Inspect first T1w with fslinfo:"
+first_t1w=$(head -1 /tmp/msc_t1w_files.txt)
+fslinfo "${first_t1w}"
+echo
+
+echo "Inspect first rest BOLD with fslinfo:"
+first_bold=$(head -1 /tmp/msc_rest_bold_files.txt)
+fslinfo "${first_bold}"
+echo
+
+echo "Rest BOLD volume count:"
+fslnvols "${first_bold}"
+echo
+
+first_task_bold=$(head -1 /tmp/msc_task_bold_files.txt || true)
+if [[ -n "${first_task_bold}" && -f "${first_task_bold}" ]]; then
+  echo "Inspect first glasslexical task BOLD with fslinfo:"
+  fslinfo "${first_task_bold}"
+  echo
+
+  echo "Task BOLD volume count:"
+  fslnvols "${first_task_bold}"
+  echo
+fi
+
+echo "Optional input audit:"
+echo "T2w files:"
+find . -iname "*T2w*.nii.gz" | sort | head -50
+echo
+
+echo "Fieldmap-like files:"
+find . \( -path "*/fmap/*" -o -iname "*fieldmap*" -o -iname "*magnitude*" -o -iname "*phasediff*" -o -iname "*phase*" \) | sort | head -100
+echo
+
+echo "SBRef or spin echo files:"
+find . \( -iname "*sbref*" -o -iname "*SpinEcho*" -o -iname "*se*" \) | sort | head -100
+echo
+
+echo "Verification complete."
+BASH
+chmod +x /scratch/alpine/__USER__/openneuro/hcp_scripts/03_verify_msc_download.sh
+
+export USERNAME="__USER__"
+export MSC_BIDS_DIR="__MSC_BIDS_DIR__"
+export FSLDIR="__FSLDIR__"
+bash /scratch/alpine/__USER__/openneuro/hcp_scripts/03_verify_msc_download.sh</code></pre>
+</div>
+</section>
+<section class="section" id="env">
+<h2>4. Load the HCP/FSL environment</h2>
+<p>This uses the HCP Pipeline, FSL, FreeSurfer, and Workbench paths.</p>
+<div class="learning-grid">
+<div class="learning-card">
+<h3>Why environment setup matters</h3>
+<p>Most neuroimaging tools are command-line programs. The shell needs to know where those programs live. Updating <span class="inline-code">PATH</span> makes commands like <span class="inline-code">fslinfo</span>, <span class="inline-code">mcflirt</span>, and <span class="inline-code">flirt</span> visible.</p>
+</div>
+<div class="learning-card">
+<h3>Why FreeSurfer needs special handling</h3>
+<p>FreeSurfer setup scripts can contain internal checks that are harmless interactively but can stop strict shell scripts. The temporary <span class="inline-code">set +e</span>, <span class="inline-code">set +u</span>, and <span class="inline-code">set +o pipefail</span> block lets FreeSurfer load cleanly, then turns strict behavior back on.</p>
+</div>
+</div>
+<div class="callout info">
+<strong>HCP tools used here:</strong> this tutorial checks for HCP pipeline scripts and Workbench, but the MSC practical route uses FSL commands for the sample dataset because the full set of HCP inputs is not present in the downloaded subset.
+</div>
+<div class="code-card">
+<div class="code-head"><span class="code-title">Create and run 04_setup_hcp_fsl_env.sh</span><button class="copy">Copy</button></div>
+<pre><code class="template">mkdir -p /scratch/alpine/__USER__/openneuro/hcp_scripts
+cat &gt; /scratch/alpine/__USER__/openneuro/hcp_scripts/04_setup_hcp_fsl_env.sh &lt;&lt;'BASH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+###############################################################################
+# 04_setup_hcp_fsl_env.sh
+# Load FSL, FreeSurfer, HCP Pipelines, and Workbench.
+###############################################################################
+
+export USERNAME="${USERNAME:-jade6100}"
+
+export FSLDIR="${FSLDIR:-/projects/ics/software/fsl/6.0.7}"
+export FREESURFER_HOME="${FREESURFER_HOME:-/projects/ics/software/freesurfer/6.0.1}"
+export FS_LICENSE="${FS_LICENSE:-${FREESURFER_HOME}/license.txt}"
+export HCPPIPEDIR="${HCPPIPEDIR:-/projects/ics/software/hcp_pipeline/HCP_Pipelines-3.4.0}"
+export CARET7DIR="${CARET7DIR:-/projects/ics/software/hcp_pipeline/caret_workbench/bin_rh_linux64}"
+
+export PATH="${HCPPIPEDIR}/global/scripts:${HCPPIPEDIR}/PreFreeSurfer:${HCPPIPEDIR}/FreeSurfer:${HCPPIPEDIR}/PostFreeSurfer:${HCPPIPEDIR}/fMRIVolume:${HCPPIPEDIR}/fMRISurface:${CARET7DIR}:${FSLDIR}/bin:${FSLDIR}/share/fsl/bin:${FREESURFER_HOME}/bin:${PATH}"
+
+source "${FSLDIR}/etc/fslconf/fsl.sh"
+
+# FreeSurfer 6 setup can fail under strict bash settings because of internal
+# grep checks. Temporarily relax strict mode while sourcing it.
+export FS_FREESURFERENV_NO_OUTPUT=1
+set +e
+set +u
+set +o pipefail
+source "${FREESURFER_HOME}/SetUpFreeSurfer.sh"
+FS_SETUP_STATUS=$?
+set -e
+set -u
+set -o pipefail
+
+if [[ "${FS_SETUP_STATUS}" -ne 0 ]]; then
+  echo "ERROR: FreeSurfer setup failed."
+  echo "FREESURFER_HOME=${FREESURFER_HOME}"
+  exit 1
+fi
+
+echo "Environment loaded."
+echo
+echo "FSL:"
+which fslinfo
+which fslmaths
+which mcflirt
+which flirt
+which bet
+which robustfov
+echo
+echo "FreeSurfer:"
+which recon-all
+echo
+echo "HCP Pipeline scripts:"
+find "${HCPPIPEDIR}" -type f \( \
+  -name "PreFreeSurferPipeline.sh" -o \
+  -name "FreeSurferPipeline.sh" -o \
+  -name "PostFreeSurferPipeline.sh" -o \
+  -name "GenericfMRIVolumeProcessingPipeline.sh" -o \
+  -name "GenericfMRISurfaceProcessingPipeline.sh" \
+  \) | sort
+echo
+echo "Workbench:"
+command -v wb_command || true
+BASH
+chmod +x /scratch/alpine/__USER__/openneuro/hcp_scripts/04_setup_hcp_fsl_env.sh
+
+export USERNAME="__USER__"
+export FSLDIR="__FSLDIR__"
+export FREESURFER_HOME="__FREESURFER_HOME__"
+export HCPPIPEDIR="__HCPPIPEDIR__"
+export CARET7DIR="__CARET7DIR__"
+bash /scratch/alpine/__USER__/openneuro/hcp_scripts/04_setup_hcp_fsl_env.sh</code></pre>
+</div>
+</section>
+<section class="section" data-mode-section="msc" id="msc-fc">
+<h2>5. Process MSC data to FC-ready files</h2>
+<p>This produces cleaned 4D resting-state BOLD files in MNI space. The guide also downloads one raw glasslexical task run for the later PPI exercise, but Section 5 only processes the resting-state run into an FC-ready file.</p>
+<div class="callout info">
+<strong>Processing choices used in this script:</strong> the script drops the first <span class="inline-code">5</span> volumes by default, uses <span class="inline-code">TR=2.2</span> seconds, applies FSL <span class="inline-code">-bptf 22.7 2.27</span>, and uses linear FLIRT registration. With this TR, the temporal filter is approximately 0.01 to 0.10 Hz, because <span class="inline-code">22.7</span> volumes corresponds to about a 100-second high-pass cutoff and <span class="inline-code">2.27</span> volumes corresponds to about a 10-second low-pass cutoff.</div>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Processing choice</th><th>Current value</th><th>Where it is set</th><th>What it means</th></tr></thead>
+<tbody>
+<tr><td>Initial volumes trimmed</td><td><span class="inline-code">DROP_TRS=5</span></td><td>Top of the Section 5 script and SLURM script</td><td>The first five BOLD volumes are removed with <span class="inline-code">fslroi</span> before motion correction and filtering.</td></tr>
+<tr><td>Repetition time</td><td><span class="inline-code">TR=2.2</span> seconds</td><td>Top of the Section 5 script</td><td>Used to explain the temporal filter cutoff in seconds and Hz.</td></tr>
+<tr><td>Temporal filter</td><td><span class="inline-code">fslmaths -bptf 22.7 2.27</span></td><td><span class="inline-code">HIGHPASS_SIGMA</span> and <span class="inline-code">LOWPASS_SIGMA</span></td><td>Approximate band-pass range is 0.01 to 0.10 Hz for TR=2.2 seconds.</td></tr>
+<tr><td>Structural registration</td><td>Linear 12 DOF affine</td><td><span class="inline-code">flirt -dof 12</span></td><td>Aligns the brain-extracted T1w image to the MNI template.</td></tr>
+<tr><td>Functional registration</td><td>Linear 6 DOF rigid-body</td><td><span class="inline-code">flirt -dof 6</span></td><td>Aligns the mean BOLD image to the subject's T1w image.</td></tr>
+<tr><td>MNI transform application</td><td>Combined linear transform</td><td><span class="inline-code">convert_xfm</span> and <span class="inline-code">flirt -applyxfm</span></td><td>Combines BOLD-to-T1w and T1w-to-MNI transforms, then applies the combined transform to the 4D BOLD data.</td></tr>
+<tr><td>Nonlinear registration</td><td>Not used in this practical MSC route</td><td>Not applicable</td><td>This script uses linear FLIRT registration only. A full HCP-style workflow could add nonlinear registration when the required inputs and templates are available.</td></tr>
+</tbody>
+</table>
+</div>
+<div class="step-list">
+<div class="step-item"><strong>Preflight:</strong> the script checks the raw BIDS folder, creates output folders, confirms core FSL commands exist, and counts T1w and BOLD files.</div>
+<div class="step-item"><strong>Stage inputs:</strong> the T1w and BOLD files are copied into an HCP-style folder layout. This keeps raw downloaded data separate from staged processing inputs.</div>
+<div class="step-item"><strong>Structural prep:</strong> the T1w image is cropped, brain-extracted, and registered to MNI space. This gives the functional data a structural bridge to standard space.</div>
+<div class="step-item"><strong>Functional prep:</strong> the first <span class="inline-code">5</span> volumes are dropped by default using <span class="inline-code">fslroi</span>, a mean image is created, a brain mask is estimated, and motion correction is run.</div>
+<div class="step-item"><strong>Registration:</strong> the script uses linear registration. The T1w-to-MNI step uses 12 DOF affine FLIRT, the BOLD-to-T1w step uses 6 DOF rigid-body FLIRT, and the combined transform moves the BOLD time series into MNI space.</div>
+<div class="step-item"><strong>Cleanup and filtering:</strong> motion parameters are regressed out when available, <span class="inline-code">fslmaths -bptf 22.7 2.27</span> applies an approximate 0.01 to 0.10 Hz temporal filter for <span class="inline-code">TR=2.2</span> seconds, the MNI brain mask is enforced, and the final FC-ready file is written.</div>
+</div>
+<div class="callout warn">
+<strong>Interpretation note:</strong> this is a practical workflow for volume-based FC. It is not claiming to replace a full official HCP minimal preprocessing run when a dataset includes T2w, SBRef, and distortion-correction inputs.
+</div>
+<div class="code-card">
+<div class="code-head"><span class="code-title">Create 05_msc_hcp_style_to_fc_ready.sh</span><button class="copy">Copy</button></div>
+<pre><code class="template">mkdir -p /scratch/alpine/__USER__/openneuro/hcp_scripts
+cat &gt; /scratch/alpine/__USER__/openneuro/hcp_scripts/05_msc_hcp_style_to_fc_ready.sh &lt;&lt;'BASH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+###############################################################################
+# 05_msc_hcp_style_to_fc_ready.sh
+# Prepare MSC resting-state data for volume-based functional connectivity.
+#
+# Output:
+#   ${FC_DIR}/${SUBJECT}/${SESSION}/bold_fc_ready_mni.nii.gz
+###############################################################################
+
+export USERNAME="${USERNAME:-jade6100}"
+export RAW_BIDS="${RAW_BIDS:-/scratch/alpine/${USERNAME}/openneuro/ds000224}"
+export STUDY_DIR="${STUDY_DIR:-/scratch/alpine/${USERNAME}/openneuro/hcp_outputs}"
+export FC_DIR="${FC_DIR:-/scratch/alpine/${USERNAME}/openneuro/fc_ready}"
+
+export SUBJECTS="${SUBJECTS:-MSC01}"
+export FUNC_SESSIONS="${FUNC_SESSIONS:-ses-func01}"
+
+export DROP_TRS="${DROP_TRS:-5}"
+export TR="${TR:-2.2}"
+export HIGHPASS_SIGMA="${HIGHPASS_SIGMA:-22.7}"
+export LOWPASS_SIGMA="${LOWPASS_SIGMA:-2.27}"
+
+# Processing choices:
+#   DROP_TRS=5 removes the first five BOLD volumes.
+#   TR=2.2 seconds is used to interpret the temporal filter.
+#   FSL -bptf expects sigma values in volumes, not Hz.
+#   HIGHPASS_SIGMA=22.7 gives an approximate 100-second high-pass cutoff, about 0.01 Hz.
+#   LOWPASS_SIGMA=2.27 gives an approximate 10-second low-pass cutoff, about 0.10 Hz.
+#   Registration is linear only in this practical MSC route.
+
+export FSLDIR="${FSLDIR:-/projects/ics/software/fsl/6.0.7}"
+export FREESURFER_HOME="${FREESURFER_HOME:-/projects/ics/software/freesurfer/6.0.1}"
+export HCPPIPEDIR="${HCPPIPEDIR:-/projects/ics/software/hcp_pipeline/HCP_Pipelines-3.4.0}"
+export CARET7DIR="${CARET7DIR:-/projects/ics/software/hcp_pipeline/caret_workbench/bin_rh_linux64}"
+
+export PATH="${HCPPIPEDIR}/global/scripts:${HCPPIPEDIR}/PreFreeSurfer:${HCPPIPEDIR}/FreeSurfer:${HCPPIPEDIR}/PostFreeSurfer:${HCPPIPEDIR}/fMRIVolume:${HCPPIPEDIR}/fMRISurface:${CARET7DIR}:${FSLDIR}/bin:${FSLDIR}/share/fsl/bin:${FREESURFER_HOME}/bin:${PATH}"
+source "${FSLDIR}/etc/fslconf/fsl.sh"
+
+export FS_FREESURFERENV_NO_OUTPUT=1
+set +e
+set +u
+set +o pipefail
+source "${FREESURFER_HOME}/SetUpFreeSurfer.sh"
+FS_SETUP_STATUS=$?
+set -e
+set -u
+set -o pipefail
+
+if [[ "${FS_SETUP_STATUS}" -ne 0 ]]; then
+  echo "ERROR: FreeSurfer setup failed."
+  exit 1
+fi
+
+MNI_HEAD="${FSLDIR}/data/standard/MNI152_T1_2mm.nii.gz"
+MNI_BRAIN="${FSLDIR}/data/standard/MNI152_T1_2mm_brain.nii.gz"
+MNI_MASK="${FSLDIR}/data/standard/MNI152_T1_2mm_brain_mask.nii.gz"
+
+preflight() {
+  echo "============================================================"
+  echo "PREFLIGHT"
+  echo "============================================================"
+  echo "RAW_BIDS=${RAW_BIDS}"
+  echo "STUDY_DIR=${STUDY_DIR}"
+  echo "FC_DIR=${FC_DIR}"
+  echo "DROP_TRS=${DROP_TRS}"
+  echo "TR=${TR}"
+  echo "HIGHPASS_SIGMA=${HIGHPASS_SIGMA}"
+  echo "LOWPASS_SIGMA=${LOWPASS_SIGMA}"
+  echo "Approximate temporal filter: 0.01 to 0.10 Hz when TR=2.2 seconds"
+  echo "Registration: linear FLIRT only, T1w-to-MNI uses 12 DOF, BOLD-to-T1w uses 6 DOF"
+
+  test -d "${RAW_BIDS}"
+  mkdir -p "${STUDY_DIR}" "${FC_DIR}"
+
+  echo
+  echo "Tool checks:"
+  which fslinfo
+  which fslmaths
+  which mcflirt
+  which flirt
+  which bet
+  which robustfov
+  which fsl_regfilt
+  which fslnvols
+
+  echo
+  echo "Input counts:"
+  echo -n "T1w count: "
+  find "${RAW_BIDS}" -name "*_T1w.nii.gz" | sort | wc -l
+  echo -n "Rest BOLD count: "
+  find "${RAW_BIDS}" -name "*task-rest_bold.nii.gz" | sort | wc -l
+}
+
+process_subject_session() {
+  local sub="$1"
+  local ses="$2"
+  local bids_sub="sub-${sub}"
+  local run_label
+  run_label=$(echo "${ses}" | sed 's/ses-func//')
+  local fmri_name="rfMRI_REST${run_label}_LR"
+
+  local hcp_sub_dir="${STUDY_DIR}/${sub}"
+  local unproc_dir="${hcp_sub_dir}/unprocessed/3T"
+  local t1w_unproc="${unproc_dir}/T1w_MPR1/${sub}_3T_T1w_MPR1.nii.gz"
+  local fmri_unproc_dir="${unproc_dir}/${fmri_name}"
+  local bold_unproc="${fmri_unproc_dir}/${sub}_3T_${fmri_name}.nii.gz"
+
+  local t1w_src
+  t1w_src=$(find "${RAW_BIDS}/${bids_sub}" -path "*/anat/*_T1w.nii.gz" | sort | head -1 || true)
+  local bold_src="${RAW_BIDS}/${bids_sub}/${ses}/func/${bids_sub}_${ses}_task-rest_bold.nii.gz"
+
+  if [[ -z "${t1w_src}" ]]; then
+    echo "ERROR: no T1w found for ${bids_sub}"
+    return 1
+  fi
+
+  if [[ ! -f "${bold_src}" ]]; then
+    echo "WARNING: missing BOLD, skipping ${bids_sub} ${ses}"
+    return 0
+  fi
+
+  echo
+  echo "============================================================"
+  echo "PROCESSING ${sub} ${ses}"
+  echo "============================================================"
+
+  mkdir -p "${unproc_dir}/T1w_MPR1" "${fmri_unproc_dir}"
+
+  echo "Staging T1w:"
+  echo "${t1w_src}"
+  cp -f "${t1w_src}" "${t1w_unproc}"
+
+  echo "Staging BOLD:"
+  echo "${bold_src}"
+  cp -f "${bold_src}" "${bold_unproc}"
+
+  local t1w_dir="${hcp_sub_dir}/T1w"
+  mkdir -p "${t1w_dir}"
+
+  echo "Structural prep..."
+  cp -f "${t1w_unproc}" "${t1w_dir}/T1w.nii.gz"
+  robustfov -i "${t1w_dir}/T1w.nii.gz" -r "${t1w_dir}/T1w_acpc_dc.nii.gz"
+  bet "${t1w_dir}/T1w_acpc_dc.nii.gz" "${t1w_dir}/T1w_acpc_dc_brain.nii.gz" -R -f 0.25 -g 0 -m
+  flirt -in "${t1w_dir}/T1w_acpc_dc_brain.nii.gz" -ref "${MNI_BRAIN}" -omat "${t1w_dir}/T1w_to_MNI.mat" -out "${t1w_dir}/T1w_acpc_dc_brain_mni.nii.gz" -dof 12
+  convert_xfm -omat "${t1w_dir}/MNI_to_T1w.mat" -inverse "${t1w_dir}/T1w_to_MNI.mat"
+
+  local out_dir="${FC_DIR}/${sub}/${ses}"
+  mkdir -p "${out_dir}"
+
+  echo "Functional prep..."
+  echo "Dropping the first ${DROP_TRS} volumes before motion correction."
+  fslroi "${bold_unproc}" "${out_dir}/bold_drop.nii.gz" "${DROP_TRS}" -1
+  fslmaths "${out_dir}/bold_drop.nii.gz" -Tmean "${out_dir}/bold_mean.nii.gz"
+  bet "${out_dir}/bold_mean.nii.gz" "${out_dir}/bold_mean_brain.nii.gz" -f 0.3 -m
+  mcflirt -in "${out_dir}/bold_drop.nii.gz" -out "${out_dir}/bold_mc.nii.gz" -plots -mats -reffile "${out_dir}/bold_mean_brain.nii.gz"
+  fslmaths "${out_dir}/bold_mc.nii.gz" -mas "${out_dir}/bold_mean_brain_mask.nii.gz" "${out_dir}/bold_mc_brain.nii.gz"
+
+  echo "Registering BOLD to T1w and MNI using linear FLIRT transforms..."
+  echo "BOLD-to-T1w: 6 DOF rigid-body linear registration"
+  echo "T1w-to-MNI: 12 DOF affine linear registration"
+  flirt -in "${out_dir}/bold_mean_brain.nii.gz" -ref "${t1w_dir}/T1w_acpc_dc_brain.nii.gz" -omat "${out_dir}/bold_to_T1w.mat" -out "${out_dir}/bold_mean_to_T1w.nii.gz" -dof 6
+  convert_xfm -omat "${out_dir}/bold_to_MNI.mat" -concat "${t1w_dir}/T1w_to_MNI.mat" "${out_dir}/bold_to_T1w.mat"
+  flirt -in "${out_dir}/bold_mc_brain.nii.gz" -ref "${MNI_HEAD}" -applyxfm -init "${out_dir}/bold_to_MNI.mat" -out "${out_dir}/bold_mc_mni.nii.gz" -interp trilinear
+
+  echo "Motion cleanup..."
+  local par="${out_dir}/bold_mc.nii.gz.par"
+  if [[ ! -f "${par}" ]]; then
+    par="${out_dir}/bold_mc.par"
+  fi
+
+  if [[ -f "${par}" ]]; then
+    cp -f "${par}" "${out_dir}/motion.par"
+    fsl_regfilt -i "${out_dir}/bold_mc_mni.nii.gz" -d "${out_dir}/motion.par" -f "1,2,3,4,5,6" -o "${out_dir}/bold_mc_mni_motionreg.nii.gz"
+  else
+    echo "WARNING: motion parameter file not found. Continuing without motion regression."
+    cp -f "${out_dir}/bold_mc_mni.nii.gz" "${out_dir}/bold_mc_mni_motionreg.nii.gz"
+  fi
+
+  echo "Temporal filtering..."
+  echo "Applying FSL -bptf ${HIGHPASS_SIGMA} ${LOWPASS_SIGMA}. With TR=${TR}, this is approximately 0.01 to 0.10 Hz."
+  fslmaths "${out_dir}/bold_mc_mni_motionreg.nii.gz" \
+    -bptf "${HIGHPASS_SIGMA}" "${LOWPASS_SIGMA}" \
+    "${out_dir}/bold_fc_ready_mni.nii.gz"
+
+  fslmaths "${out_dir}/bold_fc_ready_mni.nii.gz" -mas "${MNI_MASK}" "${out_dir}/bold_fc_ready_mni.nii.gz"
+  fslmaths "${out_dir}/bold_fc_ready_mni.nii.gz" -Tmean "${out_dir}/bold_fc_ready_mni_mean.nii.gz"
+  fslnvols "${out_dir}/bold_fc_ready_mni.nii.gz" &gt; "${out_dir}/n_volumes_after_drop.txt"
+
+  cat &gt; "${out_dir}/processing_parameters.txt" &lt;&lt;PARAMS
+DROP_TRS=${DROP_TRS}
+TR=${TR}
+HIGHPASS_SIGMA=${HIGHPASS_SIGMA}
+LOWPASS_SIGMA=${LOWPASS_SIGMA}
+APPROX_FILTER_HZ=0.01_to_0.10_when_TR_is_2.2_seconds
+REGISTRATION=T1w_to_MNI_linear_FLIRT_12DOF;BOLD_to_T1w_linear_FLIRT_6DOF;combined_linear_transform_to_MNI
+NONLINEAR_REGISTRATION=not_used_in_this_practical_MSC_route
+PARAMS
+
+  echo "Finished ${sub} ${ses}"
+  echo "Output: ${out_dir}/bold_fc_ready_mni.nii.gz"
+}
+
+preflight
+
+for sub in ${SUBJECTS}; do
+  for ses in ${FUNC_SESSIONS}; do
+    process_subject_session "${sub}" "${ses}"
+  done
+done
+
+echo
+echo "All requested processing complete."
+find "${FC_DIR}" -name "bold_fc_ready_mni.nii.gz" | sort
+BASH
+chmod +x /scratch/alpine/__USER__/openneuro/hcp_scripts/05_msc_hcp_style_to_fc_ready.sh</code></pre>
+</div>
+<div class="code-card">
+<div class="code-head"><span class="code-title">Run one subject and one session interactively</span><button class="copy">Copy</button></div>
+<pre><code class="template">export USERNAME="__USER__"
+export RAW_BIDS="__MSC_BIDS_DIR__"
+export STUDY_DIR="/scratch/alpine/__USER__/openneuro/hcp_outputs"
+export FC_DIR="/scratch/alpine/__USER__/openneuro/fc_ready"
+export SUBJECTS="MSC01"
+export FUNC_SESSIONS="ses-func01"
+
+bash /scratch/alpine/__USER__/openneuro/hcp_scripts/05_msc_hcp_style_to_fc_ready.sh</code></pre>
+</div>
+</section>
+<section class="section" data-mode-section="msc" id="slurm">
+<h2>6. Run with SLURM</h2>
+<p>After one subject works, submit the five-subject job.</p>
+<div class="learning-grid">
+<div class="learning-card">
+<h3>Why test interactively first</h3>
+<p>An interactive one-subject test gives fast feedback. If a path or environment variable is wrong, you see the error immediately instead of waiting for a scheduled job to fail.</p>
+</div>
+<div class="learning-card">
+<h3>Why use SLURM next</h3>
+<p>Once the workflow works for one subject, SLURM lets the server handle the longer job. The log files in <span class="inline-code">hcp_scripts/logs</span> become the place to check progress and errors.</p>
+</div>
+</div>
+
+<div class="code-card">
+<div class="code-head"><span class="code-title">Create and submit SLURM script</span><button class="copy">Copy</button></div>
+<pre><code class="template">mkdir -p /scratch/alpine/__USER__/openneuro/hcp_scripts/logs
+cat &gt; /scratch/alpine/__USER__/openneuro/hcp_scripts/06_run_msc_fc_ready.slurm &lt;&lt;'BASH'
+#!/bin/bash
+#SBATCH --job-name=msc_fc_ready
+#SBATCH --output=/scratch/alpine/jade6100/openneuro/hcp_scripts/logs/msc_fc_ready_%j.out
+#SBATCH --error=/scratch/alpine/jade6100/openneuro/hcp_scripts/logs/msc_fc_ready_%j.err
+#SBATCH --time=24:00:00
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --partition=amilan
+
+set -euo pipefail
+
+export USERNAME="jade6100"
+export RAW_BIDS="/scratch/alpine/${USERNAME}/openneuro/ds000224"
+export STUDY_DIR="/scratch/alpine/${USERNAME}/openneuro/hcp_outputs"
+export FC_DIR="/scratch/alpine/${USERNAME}/openneuro/fc_ready"
+
+export SUBJECTS="MSC01 MSC02 MSC03 MSC04 MSC05"
+export FUNC_SESSIONS="ses-func01"
+
+export DROP_TRS="5"
+export TR="2.2"
+
+mkdir -p /scratch/alpine/${USERNAME}/openneuro/hcp_scripts/logs
+
+bash /scratch/alpine/${USERNAME}/openneuro/hcp_scripts/05_msc_hcp_style_to_fc_ready.sh
+BASH
+
+# Replace hardcoded username in the SBATCH output paths if needed.
+perl -pi -e 's/jade6100/__USER__/g' /scratch/alpine/__USER__/openneuro/hcp_scripts/06_run_msc_fc_ready.slurm
+
+sbatch /scratch/alpine/__USER__/openneuro/hcp_scripts/06_run_msc_fc_ready.slurm</code></pre>
+</div>
+</section>
+<section class="section" data-mode-section="own" id="own-files">
+<h2>Own-data requirements for the full HCP pipeline</h2>
+<p class="lead">The own-data path is for datasets that have the files expected by the fuller HCP pipeline. It is more demanding than the MSC sample path because it expects specific anatomical, functional, and distortion-correction inputs.</p>
+<div class="callout warn">
+<strong>Do not force the full HCP template onto incomplete data.</strong> If your dataset only has T1w and BOLD files, use the practical HCP-style/FSL path. Use the full HCP template when you have the additional inputs listed below.
+</div>
+<div class="table-wrap"><table><thead><tr><th>Input</th><th>Needed for</th></tr></thead><tbody>
+<tr><td>T1w</td><td>Structural anatomy and registrations.</td></tr>
+<tr><td>T2w</td><td>Full HCP structural path and surface-related processing.</td></tr>
+<tr><td>Rest BOLD</td><td>Main functional time series.</td></tr>
+<tr><td>SBRef</td><td>Recommended scout/reference image for fMRI registration.</td></tr>
+<tr><td>Spin-echo pairs or fieldmaps</td><td>Distortion correction with TOPUP or fieldmap methods.</td></tr>
+<tr><td>Dwell time and phase-encoding direction</td><td>Required scan parameters for distortion correction.</td></tr>
+</tbody></table></div>
+</section>
+<section class="section" data-mode-section="own" id="own-hcp">
+<h2>Full HCP template for your own data</h2>
+<p>Edit the input paths at the top of the script before running it.</p>
+<div class="learning-grid">
+<div class="learning-card">
+<h3>How to adapt this template</h3>
+<p>Replace every <span class="inline-code">/path/to/...</span> value with a real file on the server. Then confirm each file exists with <span class="inline-code">ls -lh</span> before running the full script.</p>
+</div>
+<div class="learning-card">
+<h3>What to check first</h3>
+<p>Confirm T1w, T2w, BOLD, SBRef, spin-echo or fieldmap files, phase-encoding direction, and dwell time. Missing or incorrect metadata can cause distortion-correction and registration failures.</p>
+</div>
+</div>
+<div class="code-card">
+<div class="code-head"><span class="code-title">Create 07_full_hcp_own_data_template.sh</span><button class="copy">Copy</button></div>
+<pre><code class="template">mkdir -p /scratch/alpine/__USER__/openneuro/hcp_scripts
+cat &gt; /scratch/alpine/__USER__/openneuro/hcp_scripts/07_full_hcp_own_data_template.sh &lt;&lt;'BASH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+###############################################################################
+# 07_full_hcp_own_data_template.sh
+# Template for running the official HCP scripts on your own data.
+#
+# Edit the file paths under "EDIT THESE FOR YOUR OWN DATA" before running.
+###############################################################################
+
+export USERNAME="${USERNAME:-jade6100}"
+
+export FSLDIR="${FSLDIR:-/projects/ics/software/fsl/6.0.7}"
+export FREESURFER_HOME="${FREESURFER_HOME:-/projects/ics/software/freesurfer/6.0.1}"
+export FS_LICENSE="${FS_LICENSE:-${FREESURFER_HOME}/license.txt}"
+export HCPPIPEDIR="${HCPPIPEDIR:-/projects/ics/software/hcp_pipeline/HCP_Pipelines-3.4.0}"
+export CARET7DIR="${CARET7DIR:-/projects/ics/software/hcp_pipeline/caret_workbench/bin_rh_linux64}"
+export PATH="${HCPPIPEDIR}/global/scripts:${HCPPIPEDIR}/PreFreeSurfer:${HCPPIPEDIR}/FreeSurfer:${HCPPIPEDIR}/PostFreeSurfer:${HCPPIPEDIR}/fMRIVolume:${HCPPIPEDIR}/fMRISurface:${CARET7DIR}:${FSLDIR}/bin:${FSLDIR}/share/fsl/bin:${FREESURFER_HOME}/bin:${PATH}"
+
+source "${FSLDIR}/etc/fslconf/fsl.sh"
+
+export FS_FREESURFERENV_NO_OUTPUT=1
+set +e
+set +u
+set +o pipefail
+source "${FREESURFER_HOME}/SetUpFreeSurfer.sh"
+FS_SETUP_STATUS=$?
+set -e
+set -u
+set -o pipefail
+
+if [[ "${FS_SETUP_STATUS}" -ne 0 ]]; then
+  echo "ERROR: FreeSurfer setup failed."
+  exit 1
+fi
+
+###############################################################################
+# EDIT THESE FOR YOUR OWN DATA
+###############################################################################
+
+export StudyFolder="${StudyFolder:-/scratch/alpine/${USERNAME}/my_hcp_project/hcp_outputs}"
+export Subject="${Subject:-sub-01}"
+
+export T1wInputImage="${T1wInputImage:-/path/to/sub-01_T1w.nii.gz}"
+export T2wInputImage="${T2wInputImage:-/path/to/sub-01_T2w.nii.gz}"
+
+export fMRIName="${fMRIName:-rfMRI_REST01_LR}"
+export fMRIInput="${fMRIInput:-/path/to/sub-01_task-rest_bold.nii.gz}"
+export SBRefInput="${SBRefInput:-/path/to/sub-01_task-rest_sbref.nii.gz}"
+
+export SpinEchoPhaseEncodeNegative="${SpinEchoPhaseEncodeNegative:-/path/to/spin_echo_negative.nii.gz}"
+export SpinEchoPhaseEncodePositive="${SpinEchoPhaseEncodePositive:-/path/to/spin_echo_positive.nii.gz}"
+
+export PhaseEncodingDir="${PhaseEncodingDir:-y}"
+export DwellTime="${DwellTime:-0.00058}"
+export DistortionCorrection="${DistortionCorrection:-TOPUP}"
+export GradientDistortionCoeffs="${GradientDistortionCoeffs:-NONE}"
+export TopUpConfig="${TopUpConfig:-${HCPPIPEDIR}/global/config/b02b0.cnf}"
+
+export FinalFMRIResolution="${FinalFMRIResolution:-2}"
+export LowResMesh="${LowResMesh:-32}"
+export GrayordinatesResolution="${GrayordinatesResolution:-2}"
+
+mkdir -p "${StudyFolder}/${Subject}/unprocessed/3T/T1w_MPR1"
+mkdir -p "${StudyFolder}/${Subject}/unprocessed/3T/T2w_SPC1"
+mkdir -p "${StudyFolder}/${Subject}/unprocessed/3T/${fMRIName}"
+
+cp -f "${T1wInputImage}" "${StudyFolder}/${Subject}/unprocessed/3T/T1w_MPR1/${Subject}_3T_T1w_MPR1.nii.gz"
+cp -f "${T2wInputImage}" "${StudyFolder}/${Subject}/unprocessed/3T/T2w_SPC1/${Subject}_3T_T2w_SPC1.nii.gz"
+cp -f "${fMRIInput}" "${StudyFolder}/${Subject}/unprocessed/3T/${fMRIName}/${Subject}_3T_${fMRIName}.nii.gz"
+cp -f "${SBRefInput}" "${StudyFolder}/${Subject}/unprocessed/3T/${fMRIName}/${Subject}_3T_${fMRIName}_SBRef.nii.gz"
+cp -f "${SpinEchoPhaseEncodeNegative}" "${StudyFolder}/${Subject}/unprocessed/3T/${fMRIName}/${Subject}_3T_SpinEchoFieldMap_LR.nii.gz"
+cp -f "${SpinEchoPhaseEncodePositive}" "${StudyFolder}/${Subject}/unprocessed/3T/${fMRIName}/${Subject}_3T_SpinEchoFieldMap_RL.nii.gz"
+
+echo "Running HCP PreFreeSurfer..."
+"${HCPPIPEDIR}/PreFreeSurfer/PreFreeSurferPipeline.sh" \
+  --path="${StudyFolder}" \
+  --subject="${Subject}" \
+  --t1="${StudyFolder}/${Subject}/unprocessed/3T/T1w_MPR1/${Subject}_3T_T1w_MPR1.nii.gz" \
+  --t2="${StudyFolder}/${Subject}/unprocessed/3T/T2w_SPC1/${Subject}_3T_T2w_SPC1.nii.gz" \
+  --t1template="${FSLDIR}/data/standard/MNI152_T1_0.7mm.nii.gz" \
+  --t1templatebrain="${FSLDIR}/data/standard/MNI152_T1_0.7mm_brain.nii.gz" \
+  --t1template2mm="${FSLDIR}/data/standard/MNI152_T1_2mm.nii.gz" \
+  --t2template="${FSLDIR}/data/standard/MNI152_T1_0.7mm.nii.gz" \
+  --t2templatebrain="${FSLDIR}/data/standard/MNI152_T1_0.7mm_brain.nii.gz" \
+  --t2template2mm="${FSLDIR}/data/standard/MNI152_T1_2mm.nii.gz" \
+  --templatemask="${FSLDIR}/data/standard/MNI152_T1_0.7mm_brain_mask.nii.gz" \
+  --template2mmmask="${FSLDIR}/data/standard/MNI152_T1_2mm_brain_mask_dil.nii.gz" \
+  --brainsize="150" \
+  --fnirtconfig="${HCPPIPEDIR}/global/config/T1_2_MNI152_2mm.cnf" \
+  --fmapmag="NONE" \
+  --fmapphase="NONE" \
+  --echospacing="NONE" \
+  --seunwarpdir="NONE" \
+  --gdcoeffs="${GradientDistortionCoeffs}"
+
+echo "Running HCP FreeSurfer..."
+"${HCPPIPEDIR}/FreeSurfer/FreeSurferPipeline.sh" \
+  --subject="${Subject}" \
+  --subjectDIR="${StudyFolder}/${Subject}/T1w" \
+  --t1="${StudyFolder}/${Subject}/T1w/T1w_acpc_dc_restore.nii.gz" \
+  --t1brain="${StudyFolder}/${Subject}/T1w/T1w_acpc_dc_restore_brain.nii.gz" \
+  --t2="${StudyFolder}/${Subject}/T1w/T2w_acpc_dc_restore.nii.gz"
+
+echo "Running HCP PostFreeSurfer..."
+"${HCPPIPEDIR}/PostFreeSurfer/PostFreeSurferPipeline.sh" \
+  --path="${StudyFolder}" \
+  --subject="${Subject}" \
+  --surfatlasdir="${HCPPIPEDIR}/global/templates/standard_mesh_atlases" \
+  --grayordinatesdir="${HCPPIPEDIR}/global/templates/91282_Greyordinates" \
+  --grayordinatesres="${GrayordinatesResolution}" \
+  --hiresmesh="164" \
+  --lowresmesh="${LowResMesh}" \
+  --subcortgraylabels="${HCPPIPEDIR}/global/config/FreeSurferSubcorticalLabelTableLut.txt" \
+  --freesurferlabels="${HCPPIPEDIR}/global/config/FreeSurferAllLut.txt" \
+  --refmyelinmaps="NONE"
+
+echo "Running HCP fMRI volume processing..."
+"${HCPPIPEDIR}/fMRIVolume/GenericfMRIVolumeProcessingPipeline.sh" \
+  --path="${StudyFolder}" \
+  --subject="${Subject}" \
+  --fmriname="${fMRIName}" \
+  --fmritcs="${StudyFolder}/${Subject}/unprocessed/3T/${fMRIName}/${Subject}_3T_${fMRIName}.nii.gz" \
+  --fmriscout="${StudyFolder}/${Subject}/unprocessed/3T/${fMRIName}/${Subject}_3T_${fMRIName}_SBRef.nii.gz" \
+  --SEPhaseNeg="${StudyFolder}/${Subject}/unprocessed/3T/${fMRIName}/${Subject}_3T_SpinEchoFieldMap_LR.nii.gz" \
+  --SEPhasePos="${StudyFolder}/${Subject}/unprocessed/3T/${fMRIName}/${Subject}_3T_SpinEchoFieldMap_RL.nii.gz" \
+  --echospacing="${DwellTime}" \
+  --unwarpdir="${PhaseEncodingDir}" \
+  --fmrires="${FinalFMRIResolution}" \
+  --dcmethod="${DistortionCorrection}" \
+  --gdcoeffs="${GradientDistortionCoeffs}" \
+  --topupconfig="${TopUpConfig}"
+
+echo "Full HCP template finished."
+echo "Check outputs under:"
+echo "${StudyFolder}/${Subject}/MNINonLinear/Results/${fMRIName}"
+BASH
+chmod +x /scratch/alpine/__USER__/openneuro/hcp_scripts/07_full_hcp_own_data_template.sh</code></pre>
+</div>
+</section>
+<section class="section" id="outputs">
+<h2>Expected outputs</h2>
+<p class="lead">The most important final processed file is <span class="inline-code">bold_fc_ready_mni.nii.gz</span>. This is the file you should use for downstream volume-based functional connectivity exercises. The output folder also stores <span class="inline-code">processing_parameters.txt</span>, which records the number of volumes trimmed, filter settings, and registration approach. The download also keeps one raw glasslexical task BOLD run and its events file for later PPI examples.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Output</th><th>Meaning</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td><span class="inline-code">bold_fc_ready_mni.nii.gz</span></td><td>Final cleaned 4D BOLD file in MNI space.</td><td>Use this for FC analysis.</td></tr>
+<tr><td><span class="inline-code">bold_fc_ready_mni_mean.nii.gz</span></td><td>Mean image across the final time series.</td><td>Use for quick visual QC.</td></tr>
+<tr><td><span class="inline-code">motion.par</span></td><td>Motion parameters from motion correction.</td><td>Use to inspect movement and nuisance regressors.</td></tr>
+<tr><td><span class="inline-code">n_volumes_after_drop.txt</span></td><td>Number of time points after dropping the first <span class="inline-code">5</span> volumes.</td><td>Use to confirm expected time-series length after trimming.</td></tr>
+<tr><td><span class="inline-code">processing_parameters.txt</span></td><td>Plain-text record of trimming, TR, filter values, approximate filter band, and registration type.</td><td>Use this when reporting exactly how the FC-ready file was created.</td></tr>
+<tr><td><span class="inline-code">*_task-glasslexical_run-01_bold.nii.gz</span></td><td>Raw task BOLD run downloaded from MSC.</td><td>Keep for the later PPI section, where task events are needed.</td></tr>
+<tr><td><span class="inline-code">*_task-glasslexical_run-01_events.tsv</span></td><td>Task timing file for the glasslexical run.</td><td>Use later to build the psychological/task regressor for PPI.</td></tr>
+<tr><td><span class="inline-code">bold_to_T1w.mat</span> and <span class="inline-code">bold_to_MNI.mat</span></td><td>Registration transforms.</td><td>Use for debugging alignment.</td></tr>
+</tbody>
+</table>
+</div>
+<div class="code-card">
+<div class="code-head"><span class="code-title">Check final FC-ready files</span><button class="copy">Copy</button></div>
+<pre><code class="template">find /scratch/alpine/__USER__/openneuro/fc_ready -name "bold_fc_ready_mni.nii.gz" | sort
+
+fslinfo /scratch/alpine/__USER__/openneuro/fc_ready/MSC01/ses-func01/bold_fc_ready_mni.nii.gz
+fslnvols /scratch/alpine/__USER__/openneuro/fc_ready/MSC01/ses-func01/bold_fc_ready_mni.nii.gz
+cat /scratch/alpine/__USER__/openneuro/fc_ready/MSC01/ses-func01/processing_parameters.txt
+
+echo
+echo "Task files kept for later PPI:"
+find /scratch/alpine/__USER__/openneuro/ds000224 -name "*task-glasslexical_run-01_bold.nii.gz" | sort | head
+find /scratch/alpine/__USER__/openneuro/ds000224 -name "*task-glasslexical_run-01_events.tsv" | sort | head</code></pre>
+</div>
+</section>
+<section class="section" id="cleanup">
+<h2>Clean accidental bad paths</h2>
+<p>Use this only if you accidentally created a folder like <span class="inline-code">/home/jade6100/$/scratch/...</span>.</p>
+<div class="code-card">
+<div class="code-head"><span class="code-title">Remove accidental dollar-sign folder</span><button class="copy">Copy</button></div>
+<pre><code class="template">rm -rf /home/__USER__/\$
+
+# Confirm the real folder exists:
+ls -lah /scratch/alpine/__USER__/openneuro</code></pre>
+</div>
+</section>
+<section class="section" id="cheatsheet">
+<h2>Cheat sheet</h2>
+<p class="lead">This section is for you if you have already read the tutorial and want the shortest safe sequence of commands. The first time through, you should still run each main section one at a time and inspect the output.</p>
+<div class="code-card">
+<div class="code-head"><span class="code-title">Run everything in order for MSC</span><button class="copy">Copy</button></div>
+<pre><code class="template">export USERNAME="__USER__"
+
+bash /scratch/alpine/__USER__/openneuro/hcp_scripts/01_install_aws_cli.sh
+bash /scratch/alpine/__USER__/openneuro/hcp_scripts/02_download_msc_openneuro.sh
+bash /scratch/alpine/__USER__/openneuro/hcp_scripts/03_verify_msc_download.sh
+bash /scratch/alpine/__USER__/openneuro/hcp_scripts/04_setup_hcp_fsl_env.sh
+
+export RAW_BIDS="/scratch/alpine/__USER__/openneuro/ds000224"
+export STUDY_DIR="/scratch/alpine/__USER__/openneuro/hcp_outputs"
+export FC_DIR="/scratch/alpine/__USER__/openneuro/fc_ready"
+export SUBJECTS="MSC01"
+export FUNC_SESSIONS="ses-func01"
+bash /scratch/alpine/__USER__/openneuro/hcp_scripts/05_msc_hcp_style_to_fc_ready.sh</code></pre>
+</div>
+</section>
+<section class="section" id="troubleshooting">
+<h2>Troubleshooting guide</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Problem</th><th>Likely cause</th><th>What to do</th></tr></thead>
+<tbody>
+<tr><td><span class="inline-code">aws: command not found</span></td><td>AWS CLI is not installed or the scratch bin folder is not in <span class="inline-code">PATH</span>.</td><td>Run the AWS install section again, then run <span class="inline-code">which aws</span>.</td></tr>
+<tr><td><span class="inline-code">BrokenPipeError</span> after <span class="inline-code">aws s3 ls | head</span></td><td><span class="inline-code">head</span> closed the output stream early.</td><td>The tutorial disables pipefail only for that check. It is not a data problem.</td></tr>
+<tr><td>Verifier finds zero files</td><td>The download did not run, the subject list is wrong, or the path points to the wrong folder.</td><td>Run <span class="inline-code">pwd</span>, then <span class="inline-code">find /scratch/alpine/&lt;user&gt;/openneuro/ds000224 -name "*task-rest_bold.nii.gz" | head</span>.</td></tr>
+<tr><td><span class="inline-code">fslinfo: command not found</span></td><td>FSL is not loaded or <span class="inline-code">FSLDIR</span> is wrong.</td><td>Run the HCP/FSL environment section and check <span class="inline-code">which fslinfo</span>.</td></tr>
+<tr><td>Folder starts with <span class="inline-code">/home/&lt;user&gt;/$/scratch</span></td><td>A dollar sign was accidentally pasted before an absolute path.</td><td>Use the cleanup section and rerun commands with paths that begin directly with <span class="inline-code">/scratch</span>.</td></tr>
+<tr><td>Registration output looks wrong</td><td>Brain extraction or alignment may have failed, or the anatomical image has unusual coverage.</td><td>Inspect mean images and registration outputs visually before using FC results.</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+</main>
+</div>
+</div>
+<script>
+const defaults = {};
+document.querySelectorAll('[data-var]').forEach(el => defaults[el.dataset.var] = el.value || '');
+
+function getVars(){
+  const vars = {};
+  document.querySelectorAll('[data-var]').forEach(el => vars[el.dataset.var] = el.value || '');
+  let changed = true;
+  while(changed){
+    changed = false;
+    Object.keys(vars).forEach(k => {
+      const before = vars[k];
+      Object.keys(vars).forEach(inner => {
+        vars[k] = vars[k].replaceAll('__' + inner + '__', vars[inner]);
+      });
+      if(vars[k] !== before) changed = true;
+    });
+  }
+  return vars;
+}
+
+function render(){
+  const vars = getVars();
+  document.querySelectorAll('code.template').forEach(code => {
+    if(!code.dataset.raw) code.dataset.raw = code.textContent;
+    let text = code.dataset.raw;
+    Object.keys(vars).forEach(k => {
+      text = text.replaceAll('__' + k + '__', vars[k]);
+    });
+    code.textContent = text;
+  });
+  const mode = document.getElementById('dataMode').value;
+  document.querySelectorAll('[data-mode-section],[data-mode-link],[data-mode-field]').forEach(el => {
+    const target = el.dataset.modeSection || el.dataset.modeLink || el.dataset.modeField;
+    el.classList.toggle('is-hidden', target && target !== mode);
+  });
+  const hero = document.getElementById('heroInput');
+  if(hero) hero.textContent = mode === 'msc' ? 'MSC sample data' : 'Own data';
+}
+
+document.querySelectorAll('.choice-card').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.choice-card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+    document.getElementById('dataMode').value = card.dataset.setMode;
+    render();
+  });
+});
+
+document.getElementById('applyBtn').addEventListener('click', render);
+document.getElementById('resetBtn').addEventListener('click', () => {
+  document.querySelectorAll('[data-var]').forEach(el => el.value = defaults[el.dataset.var] || '');
+  document.querySelectorAll('.choice-card').forEach(c => c.classList.remove('active'));
+  document.querySelector('[data-set-mode="msc"]').classList.add('active');
+  document.getElementById('dataMode').value = 'msc';
+  render();
+});
+
+document.querySelectorAll('.copy').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const code = btn.closest('.code-card').querySelector('code').textContent;
+    await navigator.clipboard.writeText(code);
+    const old = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(() => btn.textContent = old, 900);
+  });
+});
+render();
+</script>
+</body>
+</html>
