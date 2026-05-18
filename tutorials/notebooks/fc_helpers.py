@@ -103,9 +103,8 @@ def _print_index():
                             'plot_gppi_seed_profile']),
         ('Output',         ['save_fc_matrix']),
         ('Visualisation',  ['plot_fc_matrix', 'plot_time_series',
-                            'plot_fd_trace', 'plot_hrf_regressors',
-                            'plot_gppi_design_matrix']),
-        ('Utilities',      ['summarise_fc', 'summarise_gppi']),
+                            'plot_fd_trace']),
+        ('Utilities',      ['summarise_fc']),
     ]
     for group_name, names in groups:
         print(f'  ── {group_name} ' + '─' * (width - len(group_name) - 6))
@@ -507,39 +506,56 @@ def build_fmriprep_paths(fmriprep_dir=_UNSET, subject=_UNSET, session=_UNSET,
 @_register
 def load_confounds(confounds_path, cols, scrub_threshold=None):
     """
-    Load and clean confound regressors from an fMRIPrep confounds TSV file.
+    Load and clean confound regressors from an fMRIPrep confounds TSV file
+    or an FSL mcflirt ``*.par`` motion parameter file.
 
     fMRIPrep writes a TSV with one row per volume and one column per
-    confound variable.  This function selects the requested columns,
-    replaces NaN values (which appear in the first row of derivative
-    columns) with 0, and optionally adds spike regressors for high-motion
-    volumes identified by framewise displacement (FD).
+    confound variable.  FSL mcflirt writes a 6-column whitespace-delimited
+    file with no header (rotations in radians, translations in mm).
+
+    This function selects the requested columns, replaces NaN values
+    (which appear in the first row of derivative columns) with 0, and
+    optionally adds spike regressors for high-motion volumes identified
+    by framewise displacement (FD).
 
     Parameters
     ----------
     confounds_path : str or Path
-        Path to the fMRIPrep confounds TSV, e.g.
-        ``sub-01_task-rest_desc-confounds_timeseries.tsv``.
+        Path to either:
+
+        - An fMRIPrep confounds TSV
+          (``*_desc-confounds_timeseries.tsv``), or
+        - An FSL mcflirt parameter file (``*.par``).
+
+        The format is detected automatically from the file extension.
 
     cols : list of str
         Column names to include.  Any name not present in the file is
         silently skipped (a warning is printed).  Common choices:
 
-        Motion (6 DOF):
+        Motion (6 DOF) — available in **both** TSV and ``.par`` formats:
             'trans_x', 'trans_y', 'trans_z', 'rot_x', 'rot_y', 'rot_z'
-        Derivatives (6 DOF):
+        Derivatives (6 DOF) — fMRIPrep TSV only:
             'trans_x_derivative1', ... , 'rot_z_derivative1'
-        Quadratics + their derivatives (12 columns):
+        Quadratics + their derivatives (12 columns) — fMRIPrep TSV only:
             'trans_x_power2', ... , 'rot_z_derivative1_power2'
-        Tissue signals:
+        Tissue signals — fMRIPrep TSV only:
             'white_matter', 'csf', 'global_signal'
-        aCompCor (first 5):
+        aCompCor (first 5) — fMRIPrep TSV only:
             'a_comp_cor_00' ... 'a_comp_cor_04'
+
+        For ``.par`` files only the 6 standard motion column names are
+        available; any other requested columns will be skipped with a
+        warning.
 
     scrub_threshold : float or None
         Framewise displacement threshold in mm.  Volumes with FD above
         this value receive a binary spike regressor (one column per
         volume).  ``None`` disables scrubbing.  Typical value: 0.5 mm.
+
+        For ``.par`` files, FD is computed automatically from the motion
+        parameters using the Power et al. (2012) formula
+        (r = 50 mm head radius for rotation → mm conversion).
 
     Returns
     -------
@@ -551,6 +567,9 @@ def load_confounds(confounds_path, cols, scrub_threshold=None):
 
     Notes
     -----
+    - FSL mcflirt ``.par`` column order:
+      rot_x (rad), rot_y (rad), rot_z (rad),
+      trans_x (mm), trans_y (mm), trans_z (mm).
     - The first row of derivative columns is NaN in fMRIPrep output
       (no derivative can be computed for volume 0).  These are set to 0.
     - Scrubbing spike regressors are appended as additional columns after
@@ -563,15 +582,7 @@ def load_confounds(confounds_path, cols, scrub_threshold=None):
 
     Examples
     --------
-    Basic 6-parameter motion model:
-
-    >>> conf, scrubbed = load_confounds(
-    ...     'sub-01_task-rest_desc-confounds_timeseries.tsv',
-    ...     cols=['trans_x', 'trans_y', 'trans_z',
-    ...           'rot_x',   'rot_y',   'rot_z'],
-    ... )
-
-    24-parameter model with scrubbing:
+    fMRIPrep TSV — 24-parameter model with scrubbing:
 
     >>> CONFOUND_COLS = [
     ...     'trans_x', 'trans_y', 'trans_z',
@@ -590,12 +601,43 @@ def load_confounds(confounds_path, cols, scrub_threshold=None):
     ... )
     >>> print(conf.shape)   # (T, 26 + n_scrubbed_volumes)
 
+    FSL ``.par`` file — only 6-DOF motion available:
+
+    >>> conf, scrubbed = load_confounds(
+    ...     'sub-01_task-rest_mc.par',
+    ...     cols=['trans_x', 'trans_y', 'trans_z',
+    ...           'rot_x',   'rot_y',   'rot_z'],
+    ...     scrub_threshold=0.5,
+    ... )
+
     See also
     --------
-    plot_fd_trace : Visualise the framewise displacement trace.
+    plot_fd_trace       : Visualise the framewise displacement trace.
     extract_time_series : Pass the returned array as ``confounds_array``.
     """
-    df = pd.read_csv(confounds_path, sep='\t')
+    confounds_path = Path(confounds_path)
+    _PAR_COLS = ['rot_x', 'rot_y', 'rot_z', 'trans_x', 'trans_y', 'trans_z']
+
+    if confounds_path.suffix == '.par':
+        # ── FSL mcflirt *.par format ──────────────────────────────────────
+        # 6 whitespace-delimited columns, no header
+        # Order: rot_x(rad), rot_y(rad), rot_z(rad),
+        #        trans_x(mm), trans_y(mm), trans_z(mm)
+        df = pd.read_csv(confounds_path, sep=r'\s+', header=None,
+                         names=_PAR_COLS, engine='python')
+        fmt = 'fsl_par'
+        print(f'  [confounds] Detected FSL .par format '
+              f'({len(df)} volumes, 6 DOF)')
+
+        # Compute FD using Power et al. (2012): |Δtrans| + r*|Δrot|, r=50 mm
+        _r    = 50.0
+        _diff = df[_PAR_COLS].diff().fillna(0).abs()
+        _diff[['rot_x', 'rot_y', 'rot_z']] *= _r
+        df['framewise_displacement'] = _diff.sum(axis=1)
+    else:
+        # ── fMRIPrep TSV format ───────────────────────────────────────────
+        df  = pd.read_csv(confounds_path, sep='\t')
+        fmt = 'fmriprep_tsv'
 
     available = [c for c in cols if c in df.columns]
     missing   = [c for c in cols if c not in df.columns]
@@ -615,20 +657,22 @@ def load_confounds(confounds_path, cols, scrub_threshold=None):
             col[idx] = 1.0
             confounds[f'scrub_{idx:04d}'] = col
 
+    print(f'  [confounds] Format: {fmt}')
     print(f'  [confounds] Matrix shape: {confounds.shape}  (T × regressors)')
 
     if _logger:
         _logger.log_step(
             'load_confounds',
-            confounds_path    = str(confounds_path),
-            cols_requested    = len(cols),
-            cols_found        = len(available),
-            cols_skipped      = len(missing),
-            scrub_threshold   = scrub_threshold,
-            volumes_scrubbed  = len(scrubbed_idx),
-            scrubbed_indices  = scrubbed_idx if len(scrubbed_idx) <= 20
-                                else f'{len(scrubbed_idx)} volumes (list truncated)',
-            output_shape      = f'{confounds.shape[0]} volumes × {confounds.shape[1]} regressors',
+            confounds_path   = str(confounds_path),
+            format           = fmt,
+            cols_requested   = len(cols),
+            cols_found       = len(available),
+            cols_skipped     = len(missing),
+            scrub_threshold  = scrub_threshold,
+            volumes_scrubbed = len(scrubbed_idx),
+            scrubbed_indices = scrubbed_idx if len(scrubbed_idx) <= 20
+                               else f'{len(scrubbed_idx)} volumes (list truncated)',
+            output_shape     = f'{confounds.shape[0]} volumes × {confounds.shape[1]} regressors',
         )
 
     return confounds.values, scrubbed_idx
@@ -2048,26 +2092,15 @@ def build_gppi_design(seed_ts, hrf_regressors, confounds=None):
 
 @_register
 def compute_gppi_matrix(time_series, events_df, t_r, confounds=None,
-                         conditions=None, hrf_model='spm'):
+                         conditions=None, hrf_model='spm', fisher_z=False):
     """
     Compute a full ROI × ROI generalised PPI connectivity matrix.
 
-    **ROI-to-ROI approach:** every parcel acts as the seed in turn.  No
-    single seed ROI needs to be designated in advance.  The output is a
-    complete N × N matrix capturing task-modulated connectivity for all
-    pairwise combinations.
-
-    For each of the N seed ROIs the function:
-
-    1. Extracts that ROI's BOLD time series as the *physiological* term.
-    2. Builds a gPPI design matrix containing physiological, psychological
-       (HRF-convolved task), PPI interaction, and nuisance columns
-       (via ``build_gppi_design()``).
-    3. Fits OLS simultaneously against **all** N target ROIs in one
-       ``lstsq`` call — so the inner loop runs N times but each call is
-       vectorised over targets.
-    4. Sums the PPI beta coefficients across conditions to give one
-       connectivity value per seed–target pair.
+    For each seed ROI, fits an OLS general linear model with physiological
+    (seed), psychological (HRF-convolved task), and PPI interaction
+    regressors against every target ROI simultaneously.  The gPPI
+    connectivity estimate is the sum of PPI beta coefficients across all
+    modelled conditions.
 
     Parameters
     ----------
@@ -2094,6 +2127,11 @@ def compute_gppi_matrix(time_series, events_df, t_r, confounds=None,
     hrf_model : str
         HRF model for psychological regressors.  Default: ``'spm'``.
 
+    fisher_z : bool
+        If ``True``, apply ``arctanh()`` to the PPI betas.  Unlike FC
+        (Pearson r), gPPI betas are OLS regression coefficients and do
+        not require Fisher-z for group-level tests.  Default: ``False``.
+
     Returns
     -------
     gppi_matrix : np.ndarray, shape (n_rois, n_rois)
@@ -2103,10 +2141,6 @@ def compute_gppi_matrix(time_series, events_df, t_r, confounds=None,
 
     Notes
     -----
-    - **ROI-to-ROI vs seed-based:** this function iterates over ALL n_rois
-      ROIs as seeds, producing the complete N × N matrix.  If you only need
-      connectivity from one specific ROI, call ``build_gppi_design()`` and
-      ``np.linalg.lstsq()`` directly (see ``build_gppi_design`` docs).
     - Unlike FC (symmetric by definition), gPPI matrices can be
       asymmetric because the seed modulates the regression.  In practice
       the asymmetry is small; symmetrising with ``(M + M.T) / 2`` before
@@ -2149,47 +2183,45 @@ def compute_gppi_matrix(time_series, events_df, t_r, confounds=None,
                                          conditions, hrf_model)
     n_conditions = len(hrf_regs)
 
-    gppi_matrix = np.zeros((n_rois, n_rois, n_conditions))
+    gppi_matrix = np.zeros((n_rois, n_rois))
 
     print(f'  [gPPI] Computing {n_rois}×{n_rois} matrix '
           f'({n_conditions} condition(s)) …')
 
     for seed_idx in range(n_rois):
-        # ── ROI-to-ROI: every parcel serves as the seed in turn ──────────
         seed_ts = time_series[:, seed_idx]
 
-        # Build design matrix: [physiological | psychological | PPI | nuisance]
         D, col_names, ppi_cols = build_gppi_design(seed_ts, hrf_regs, confounds)
 
         # OLS: D @ B ≈ Y  →  B shape (n_regressors, n_rois)
-        # Solving against ALL n_rois targets at once (vectorised over targets).
         B, _, _, _ = np.linalg.lstsq(D, time_series, rcond=None)
 
-        # gppi_matrix[i, j] = summed PPI beta: ROI i as seed, ROI j as target
-        #gppi_matrix[seed_idx, :] = B[ppi_cols, :].sum(axis=0)
-        gppi_matrix[seed_idx, :, :] = B[ppi_cols, :].T
-        
-        if (seed_idx + 1) % 25 == 0 or seed_idx == n_rois - 1:
-            print(f'  [gPPI] {seed_idx + 1}/{n_rois} ROIs processed …')
+        # Sum PPI betas across conditions for each target
+        gppi_matrix[seed_idx, :] = B[ppi_cols, :].sum(axis=0)
 
-#     np.fill_diagonal(gppi_matrix, 0)
-    idx = np.arange(gppi_matrix.shape[0])
-    gppi_matrix[idx, idx, :] = 0
+        if (seed_idx + 1) % 25 == 0 or seed_idx == n_rois - 1:
+            print(f'  [gPPI] {seed_idx + 1}/{n_rois} seeds complete …')
+
+    np.fill_diagonal(gppi_matrix, 0)
+
+    if fisher_z:
+        gppi_matrix = np.arctanh(np.clip(gppi_matrix, -1 + 1e-7, 1 - 1e-7))
+        print('  [gPPI] Fisher z applied.')
 
     print(f'  [gPPI] Matrix complete: {gppi_matrix.shape}  '
           f'(min={gppi_matrix.min():.4f}, max={gppi_matrix.max():.4f})')
 
     if _logger:
-        idx = np.arange(gppi_matrix.shape[0])
-        mask2d = np.ones(gppi_matrix.shape[:2], dtype=bool)
-        mask2d[idx, idx] = False
-        od = gppi_matrix[mask2d, :]
+        mask = np.ones_like(gppi_matrix, dtype=bool)
+        np.fill_diagonal(mask, False)
+        od = gppi_matrix[mask]
         _logger.log_step(
             'compute_gppi_matrix',
             matrix_shape = str(gppi_matrix.shape),
             n_conditions = n_conditions,
             conditions   = list(hrf_regs.keys()),
             hrf_model    = hrf_model,
+            fisher_z     = fisher_z,
             value_min    = round(float(od.min()), 4),
             value_max    = round(float(od.max()), 4),
             value_mean   = round(float(od.mean()), 4),
@@ -2278,227 +2310,3 @@ def plot_gppi_seed_profile(gppi_matrix, labels, seed_label,
                  fontsize=11)
     plt.tight_layout()
     return fig
-
-# =============================================================================
-# gPPI Visualisation helpers
-# =============================================================================
-
-@_register
-def plot_hrf_regressors(hrf_regressors, t_r, title='HRF-convolved task regressors',
-                        figsize=(12, 3)):
-    """
-    Plot the HRF-convolved psychological regressors produced by build_hrf_regressors().
-
-    Each condition is drawn as a separate line on a shared time axis so you
-    can verify that the convolution captured your event timing correctly.
-
-    Parameters
-    ----------
-    hrf_regressors : dict
-        Output of ``build_hrf_regressors()``.
-        Mapping ``condition_name -> np.ndarray`` of shape ``(n_scans,)``.
-
-    t_r : float
-        Repetition time in seconds (used to label the x-axis).
-
-    title : str
-        Figure title.
-
-    figsize : tuple
-        Figure size in inches.
-
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-
-    Examples
-    --------
-    >>> hrf_regs = build_hrf_regressors(events_df, TR, n_scans=time_series.shape[0])
-    >>> fig = plot_hrf_regressors(hrf_regs, TR)
-    >>> plt.show()
-
-    See also
-    --------
-    build_hrf_regressors : Produce the hrf_regressors argument.
-    build_gppi_design    : Uses these regressors to assemble the design matrix.
-    """
-    n_scans = max(len(v) for v in hrf_regressors.values())
-    t_axis  = np.arange(n_scans) * t_r
-
-    fig, ax = plt.subplots(figsize=figsize)
-    for cond, reg in hrf_regressors.items():
-        ax.plot(t_axis[:len(reg)], reg, lw=1.2, label=cond)
-    ax.set(xlabel='Time (s)', ylabel='Regressor amplitude', title=title)
-    ax.legend(fontsize=9, loc='upper right')
-    ax.axhline(0, color='k', lw=0.6, ls='--')
-    plt.tight_layout()
-    return fig
-
-
-@_register
-def plot_gppi_design_matrix(design_matrix, col_names,
-                             title='gPPI design matrix',
-                             figsize=(14, 5)):
-    """
-    Visualise a gPPI design matrix returned by build_gppi_design().
-
-    Each column is displayed as a normalised heat-strip so you can verify
-    the physiological, psychological, PPI interaction, and nuisance blocks
-    are correctly assembled before running the GLM.
-
-    Parameters
-    ----------
-    design_matrix : np.ndarray, shape (T, n_columns)
-        Design matrix from ``build_gppi_design()``.
-
-    col_names : list of str
-        Column names from ``build_gppi_design()``.
-
-    title : str
-        Figure title.
-
-    figsize : tuple
-        Figure size in inches.
-
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-
-    Notes
-    -----
-    - Columns are Z-scored for display so different amplitude scales
-      (seed signal vs. binary task regressor vs. confounds) do not
-      prevent visual inspection.
-    - The intercept column (constant 1) is dropped from the display
-      because it adds no information.
-
-    Examples
-    --------
-    >>> D, col_names, ppi_idx = build_gppi_design(
-    ...     seed_ts=time_series[:, 0],
-    ...     hrf_regressors=hrf_regs,
-    ...     confounds=confounds_array,
-    ... )
-    >>> fig = plot_gppi_design_matrix(D, col_names)
-    >>> plt.show()
-
-    See also
-    --------
-    build_gppi_design : Produce the design_matrix and col_names arguments.
-    """
-    from matplotlib.patches import Patch
-
-    # Drop intercept for display
-    display_idx   = [i for i, n in enumerate(col_names) if n != 'intercept']
-    display_names = [col_names[i] for i in display_idx]
-    D_display     = design_matrix[:, display_idx].astype(float)
-
-    # Z-score each column for visual comparability
-    std = D_display.std(axis=0)
-    std[std == 0] = 1
-    D_scaled = (D_display - D_display.mean(axis=0)) / std
-
-    # Colour-code column groups
-    group_colors = []
-    for n in display_names:
-        if n == 'seed':
-            group_colors.append('#1d4ed8')   # blue   — physiological
-        elif n.startswith('psych_'):
-            group_colors.append('#0f766e')   # teal   — psychological
-        elif n.startswith('ppi_'):
-            group_colors.append('#b45309')   # amber  — PPI interaction
-        else:
-            group_colors.append('#6d28d9')   # purple — nuisance
-
-    fig, axes = plt.subplots(
-        1, len(display_names),
-        figsize=figsize,
-        gridspec_kw={'wspace': 0.08},
-    )
-    if len(display_names) == 1:
-        axes = [axes]
-
-    for ax, col, name, color in zip(axes, D_scaled.T, display_names, group_colors):
-        ax.imshow(col.reshape(-1, 1), aspect='auto', cmap='RdBu_r',
-                  vmin=-2.5, vmax=2.5)
-        ax.set_xticks([0])
-        ax.set_xticklabels([name], rotation=90, fontsize=8, color=color,
-                           fontweight='bold')
-        ax.set_yticks([])
-
-    axes[0].set_ylabel('Volumes (time)', fontsize=9)
-    fig.suptitle(title, fontsize=11, y=1.02)
-
-    legend_elements = [
-        Patch(facecolor='#1d4ed8', label='Physiological (seed)'),
-        Patch(facecolor='#0f766e', label='Psychological (task)'),
-        Patch(facecolor='#b45309', label='PPI interaction'),
-        Patch(facecolor='#6d28d9', label='Nuisance confounds'),
-    ]
-    fig.legend(handles=legend_elements, loc='lower center',
-               ncol=4, fontsize=8, bbox_to_anchor=(0.5, -0.05))
-    plt.tight_layout()
-    return fig
-
-
-@_register
-def summarise_gppi(gppi_matrix, label='gPPI matrix'):
-    """
-    Print a summary of key statistics for a gPPI connectivity matrix.
-
-    Mirrors ``summarise_fc()`` so students can compare the two analyses
-    side by side.  The diagonal (self-connections) is excluded.
-
-    Parameters
-    ----------
-    gppi_matrix : np.ndarray, shape (n_rois, n_rois)
-        gPPI connectivity matrix from ``compute_gppi_matrix()``.
-
-    label : str
-        A descriptive label printed in the header.
-
-    Returns
-    -------
-    stats : dict
-        Dictionary with keys: ``mean``, ``std``, ``min``, ``max``,
-        ``pct_positive``, ``pct_negative``.
-
-    Notes
-    -----
-    - gPPI betas are OLS regression coefficients, not Pearson correlations,
-      so their scale depends on the seed and target signal amplitudes.
-    - Positive betas indicate that coupling between seed and target is
-      *stronger* during the task condition than at baseline.
-    - Negative betas indicate *reduced* coupling during the task.
-
-    Examples
-    --------
-    >>> stats = summarise_gppi(gppi_matrix, label=f'{SUBJECT} | {TASK}')
-    >>> print(stats['mean'])
-
-    See also
-    --------
-    compute_gppi_matrix  : Produce the gppi_matrix argument.
-    summarise_fc         : Equivalent function for FC (Pearson r / Fisher z).
-    """
-    mask = np.ones_like(gppi_matrix, dtype=bool)
-    np.fill_diagonal(mask, False)
-    vals = gppi_matrix[mask]
-
-    stats = dict(
-        mean        = float(vals.mean()),
-        std         = float(vals.std()),
-        min         = float(vals.min()),
-        max         = float(vals.max()),
-        pct_positive= float(100 * (vals > 0).mean()),
-        pct_negative= float(100 * (vals < 0).mean()),
-    )
-
-    n = gppi_matrix.shape[0]
-    print(f'\n  -- {label} ({n}x{n}) gPPI ---------------------------------')
-    print(f'  Mean +/- SD  : {stats["mean"]:+.4f} +/- {stats["std"]:.4f}')
-    print(f'  Range        : [{stats["min"]:+.4f},  {stats["max"]:+.4f}]')
-    print(f'  % positive   : {stats["pct_positive"]:.1f}%  (enhanced coupling during task)')
-    print(f'  % negative   : {stats["pct_negative"]:.1f}%  (reduced coupling during task)')
-    print()
-    return stats
