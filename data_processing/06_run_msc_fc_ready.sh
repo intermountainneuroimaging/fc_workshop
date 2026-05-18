@@ -5,6 +5,7 @@
 #SBATCH --time=24:00:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
+#SBATCH --qos=normal
 #SBATCH --partition=amilan
 
 set -euo pipefail
