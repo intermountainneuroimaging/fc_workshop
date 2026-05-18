@@ -525,9 +525,13 @@ def load_confounds(confounds_path, cols, scrub_threshold=None):
 
         - An fMRIPrep confounds TSV
           (``*_desc-confounds_timeseries.tsv``), or
-        - An FSL mcflirt parameter file (``*.par``).
+        - An FSL mcflirt 6-DOF motion file (e.g. ``*.par``, ``*.txt``,
+          or any extension).
 
-        The format is detected automatically from the file extension.
+        The format is detected automatically by inspecting the first
+        line of the file: if it contains exactly 6 whitespace-delimited
+        numeric tokens and no header, it is treated as FSL 6-DOF;
+        otherwise it is parsed as a tab-separated fMRIPrep TSV.
 
     cols : list of str
         Column names to include.  Any name not present in the file is
@@ -618,16 +622,32 @@ def load_confounds(confounds_path, cols, scrub_threshold=None):
     confounds_path = Path(confounds_path)
     _PAR_COLS = ['rot_x', 'rot_y', 'rot_z', 'trans_x', 'trans_y', 'trans_z']
 
-    if confounds_path.suffix == '.par':
-        # ── FSL mcflirt *.par format ──────────────────────────────────────
-        # 6 whitespace-delimited columns, no header
-        # Order: rot_x(rad), rot_y(rad), rot_z(rad),
-        #        trans_x(mm), trans_y(mm), trans_z(mm)
+    def _is_fsl_par(path):
+        """Return True if *path* looks like a headerless 6-column numeric file."""
+        try:
+            with open(path, 'r') as fh:
+                first_line = fh.readline().strip()
+            if not first_line:
+                return False
+            tokens = first_line.split()
+            if len(tokens) != 6:
+                return False
+            float(tokens[0])   # raises ValueError if not numeric
+            float(tokens[-1])
+            return True
+        except (OSError, ValueError):
+            return False
+
+    if _is_fsl_par(confounds_path):
+        # ── FSL mcflirt 6-DOF format ──────────────────────────────────────
+        # Headerless, whitespace-delimited, exactly 6 numeric columns.
+        # Standard order: rot_x(rad), rot_y(rad), rot_z(rad),
+        #                 trans_x(mm), trans_y(mm), trans_z(mm)
         df = pd.read_csv(confounds_path, sep=r'\s+', header=None,
                          names=_PAR_COLS, engine='python')
         fmt = 'fsl_par'
-        print(f'  [confounds] Detected FSL .par format '
-              f'({len(df)} volumes, 6 DOF)')
+        print(f'  [confounds] Detected FSL 6-DOF motion format '
+              f'({len(df)} volumes, headerless)')
 
         # Compute FD using Power et al. (2012): |Δtrans| + r*|Δrot|, r=50 mm
         _r    = 50.0
@@ -1303,18 +1323,31 @@ def plot_fd_trace(confounds_path, scrub_threshold=None,
     """
     Plot the framewise displacement (FD) trace for a single run.
 
+    Accepts either an fMRIPrep confounds TSV (which already contains a
+    ``framewise_displacement`` column) or an FSL mcflirt 6-DOF motion
+    file (headerless, 6 whitespace-delimited numeric columns).  The
+    format is detected automatically by inspecting the first line of
+    the file — the same logic used by :func:`load_confounds`.
+
+    For FSL files, FD is computed on the fly using the Power et al.
+    (2012) formula: the sum of absolute finite differences in the three
+    translation parameters plus 50 mm × the absolute finite differences
+    in the three rotation parameters (converting radians to mm assuming a
+    50 mm head radius).
+
     Parameters
     ----------
     confounds_path : str or Path
-        Path to the fMRIPrep confounds TSV for the run.
+        Path to an fMRIPrep confounds TSV **or** an FSL 6-DOF motion
+        file (any extension, e.g. ``*.par``, ``*.txt``).
 
     scrub_threshold : float or None
         If set, draw a horizontal dashed line at this FD value and mark
         volumes that exceed it with red dots.
 
     t_r : float or None
-        Repetition time in seconds.  If provided, x-axis is in seconds;
-        otherwise x-axis is in volumes.
+        Repetition time in seconds.  If provided, the x-axis is in
+        seconds; otherwise it is in volumes.
 
     figsize : tuple
         Figure size in inches.
@@ -1325,34 +1358,76 @@ def plot_fd_trace(confounds_path, scrub_threshold=None,
     mean_fd : float
         Mean framewise displacement across all volumes.
     pct_scrubbed : float
-        Percentage of volumes that would be scrubbed at ``scrub_threshold``
-        (0.0 if ``scrub_threshold`` is None).
+        Percentage of volumes that would be scrubbed at
+        ``scrub_threshold`` (0.0 if ``scrub_threshold`` is None).
 
     Notes
     -----
-    - FD is computed by fMRIPrep as the sum of absolute displacements of
-      the 6 rigid-body motion parameters (converted to mm).
+    - FSL column order: rot_x (rad), rot_y (rad), rot_z (rad),
+      trans_x (mm), trans_y (mm), trans_z (mm).
+    - fMRIPrep FD is pre-computed; FSL FD is derived here using the
+      Power et al. (2012) formulation with r = 50 mm.
     - Power et al. (2012) recommend a threshold of 0.5 mm for
       resting-state and 0.9 mm for task fMRI.
 
     Examples
     --------
+    fMRIPrep TSV:
+
     >>> fig, mean_fd, pct = plot_fd_trace(
     ...     CONFOUNDS_PATH, scrub_threshold=0.5, t_r=TR
     ... )
+
+    FSL motion file (any extension):
+
+    >>> fig, mean_fd, pct = plot_fd_trace(
+    ...     'sub-01_task-rest_mc.par', scrub_threshold=0.5, t_r=TR
+    ... )
+
     >>> print(f'Mean FD: {mean_fd:.3f} mm | {pct:.1f}% scrubbed')
 
     See also
     --------
     load_confounds : Scrubbing is applied during confound loading.
     """
-    df = pd.read_csv(confounds_path, sep='\t')
-    if 'framewise_displacement' not in df.columns:
-        raise ValueError(
-            'framewise_displacement column not found in confounds file.')
+    confounds_path = Path(confounds_path)
+    _PAR_COLS = ['rot_x', 'rot_y', 'rot_z', 'trans_x', 'trans_y', 'trans_z']
 
-    fd = df['framewise_displacement'].fillna(0).values
-    x  = np.arange(len(fd)) * t_r if t_r else np.arange(len(fd))
+    def _is_fsl_par(path):
+        try:
+            with open(path, 'r') as fh:
+                first_line = fh.readline().strip()
+            if not first_line:
+                return False
+            tokens = first_line.split()
+            if len(tokens) != 6:
+                return False
+            float(tokens[0])
+            float(tokens[-1])
+            return True
+        except (OSError, ValueError):
+            return False
+
+    if _is_fsl_par(confounds_path):
+        motion = pd.read_csv(confounds_path, sep=r'\s+', header=None,
+                             names=_PAR_COLS, engine='python')
+        _r    = 50.0
+        _diff = motion[_PAR_COLS].diff().fillna(0).abs()
+        _diff[['rot_x', 'rot_y', 'rot_z']] *= _r
+        fd  = _diff.sum(axis=1).values
+        fmt = 'FSL 6-DOF (FD computed via Power 2012)'
+    else:
+        df = pd.read_csv(confounds_path, sep='\t')
+        if 'framewise_displacement' not in df.columns:
+            raise ValueError(
+                'framewise_displacement column not found. '
+                'Pass an fMRIPrep TSV or an FSL 6-DOF motion file.')
+        fd  = df['framewise_displacement'].fillna(0).values
+        fmt = 'fMRIPrep TSV'
+
+    print(f'  [FD] Format: {fmt}')
+
+    x      = np.arange(len(fd)) * t_r if t_r else np.arange(len(fd))
     xlabel = 'Time (s)' if t_r else 'Volume'
 
     scrubbed_idx = []
@@ -1383,6 +1458,7 @@ def plot_fd_trace(confounds_path, scrub_threshold=None,
         _logger.log_step(
             'plot_fd_trace',
             confounds_path   = str(confounds_path),
+            format           = fmt,
             n_volumes        = len(fd),
             mean_fd_mm       = round(mean_fd, 4),
             max_fd_mm        = round(float(fd.max()), 4),
