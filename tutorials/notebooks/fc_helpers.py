@@ -38,6 +38,12 @@ from pathlib import Path
 from nilearn import datasets, plotting
 from nilearn.maskers import NiftiLabelsMasker
 
+try:
+    import networkx as nx
+    _HAS_NETWORKX = True
+except ImportError:
+    _HAS_NETWORKX = False
+
 
 # =============================================================================
 # Help system
@@ -101,6 +107,16 @@ def _print_index():
         ('gPPI Analysis',  ['load_events', 'build_hrf_regressors',
                             'build_gppi_design', 'compute_gppi_matrix',
                             'plot_gppi_seed_profile']),
+        ('Graph Theory',   ['threshold_proportional', 'matrix_to_graph',
+                            'compute_graph_metrics', 'run_threshold_sweep',
+                            'plot_threshold_sweep', 'plot_node_metric_by_network',
+                            'plot_degree_distribution']),
+        ('Group FC',       ['load_group_matrices', 'compute_group_mean_fc',
+                            'one_sample_ttest_fc', 'two_sample_ttest_fc',
+                            'network_based_stats', 'plot_significant_fc']),
+        ('Group Graphs',   ['load_group_node_metrics', 'ttest_node_metric',
+                            'permutation_test_global_metric',
+                            'plot_node_tstat_by_network']),
         ('Output',         ['save_fc_matrix']),
         ('Visualisation',  ['plot_fc_matrix', 'plot_time_series',
                             'plot_fd_trace']),
@@ -1163,7 +1179,7 @@ def save_fc_matrix(fc_matrix, labels, output_dir, filename='fc_matrix.csv'):
 @_register
 def plot_fc_matrix(fc_matrix, labels=None,
                    title='Functional Connectivity Matrix',
-                   cmap='RdBu_r', vmax=None, figsize=(10, 8),
+                   cmap='RdBu_r', vmin=None, vmax=None, figsize=(10, 8),
                    output_path=None):
     """
     Plot a heatmap of a parcellation × parcellation FC matrix.
@@ -1185,8 +1201,11 @@ def plot_fc_matrix(fc_matrix, labels=None,
         Matplotlib colormap name.  ``'RdBu_r'`` (blue = negative,
         red = positive) is conventional for FC matrices.
 
+    vmin : float or None
+        Colour scale minimum.  If ``None``, defaults to ``-vmax``.
+
     vmax : float or None
-        Colour scale maximum (symmetric around 0).  If ``None``,
+        Colour scale maximum.  If ``None``,
         defaults to the 95th percentile of ``|fc_matrix|``.
 
     figsize : tuple of (width, height)
@@ -1222,6 +1241,8 @@ def plot_fc_matrix(fc_matrix, labels=None,
     """
     if vmax is None:
         vmax = float(np.percentile(np.abs(fc_matrix), 95))
+    if vmin is None:
+        vmin = -vmax
 
     n = fc_matrix.shape[0]
     show_labels = (labels is not None) and (n <= 50)
@@ -1232,8 +1253,8 @@ def plot_fc_matrix(fc_matrix, labels=None,
         fc_matrix,
         ax          = ax,
         cmap        = cmap,
-        vmin        = -vmax,
-        vmax        =  vmax,
+        vmin        = vmin,
+        vmax        = vmax,
         square      = True,
         xticklabels = tick_labels,
         yticklabels = tick_labels,
@@ -2058,6 +2079,244 @@ def build_hrf_regressors(events_df, t_r, n_scans,
 
 
 @_register
+def plot_hrf_regressors(hrf_regressors, t_r=2.0, title=None, figsize=None):
+    """
+    Plot HRF-convolved task regressors on a shared time axis.
+
+    Each condition is drawn as a separate line so you can visually inspect
+    whether the predicted BOLD peaks align with when neural activity is
+    expected for each trial type.  A dashed zero-line is included for
+    reference.
+
+    Parameters
+    ----------
+    hrf_regressors : dict
+        Mapping ``condition_name → np.ndarray`` of shape ``(n_scans,)``,
+        as returned by ``build_hrf_regressors()``.
+
+    t_r : float
+        Repetition time in seconds.  Used to scale the x-axis to seconds.
+        Default: 2.0.
+
+    title : str or None
+        Figure title.  If ``None``, a generic title is used.
+
+    figsize : tuple or None
+        Figure size in inches ``(width, height)``.  If ``None``, scales
+        with the number of conditions: ``(14, 2 + n_cond * 0.8)``.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> hrf_regressors = build_hrf_regressors(events_df, TR, n_scans=240)
+    >>> fig = plot_hrf_regressors(hrf_regressors, t_r=TR,
+    ...                           title='Subject 01 — HRF regressors')
+    >>> plt.show()
+
+    Save the figure:
+
+    >>> fig.savefig('./gppi_output/hrf_regressors.png', dpi=150,
+    ...             bbox_inches='tight')
+
+    See also
+    --------
+    build_hrf_regressors : Produce the hrf_regressors argument.
+    build_gppi_design    : Consume regressors to build the design matrix.
+    """
+    if not hrf_regressors:
+        raise ValueError('hrf_regressors dict is empty — nothing to plot.')
+
+    n_cond = len(hrf_regressors)
+    if figsize is None:
+        figsize = (14, 2 + n_cond * 0.9)
+
+    # Reference n_scans from the first regressor
+    n_scans = next(iter(hrf_regressors.values())).shape[0]
+    time_s  = np.arange(n_scans) * t_r          # TR-aligned time axis
+
+    # Colour cycle — distinct colours even for many conditions
+    cmap   = plt.cm.get_cmap('tab10', max(n_cond, 1))
+    colors = [cmap(i) for i in range(n_cond)]
+
+    fig, axes = plt.subplots(
+        n_cond, 1,
+        figsize     = figsize,
+        sharex      = True,
+        squeeze     = False,
+    )
+
+    for ax, (cond, reg), color in zip(axes[:, 0],
+                                      hrf_regressors.items(),
+                                      colors):
+        ax.fill_between(time_s, reg, alpha=0.18, color=color)
+        ax.plot(time_s, reg, lw=1.6, color=color, label=cond)
+        ax.axhline(0, color='#888888', lw=0.7, ls='--')
+        ax.set_ylabel(cond, fontsize=8.5, rotation=0,
+                      labelpad=90, va='center')
+        ax.set_ylim(min(reg.min() * 1.15, -0.05),
+                    max(reg.max() * 1.15,  0.05))
+        ax.yaxis.set_major_formatter(
+            plt.FuncFormatter(lambda v, _: f'{v:.1f}'))
+        ax.spines[['top', 'right']].set_visible(False)
+        ax.tick_params(axis='y', labelsize=7.5)
+
+    axes[-1, 0].set_xlabel('Time (s)', fontsize=10)
+
+    _title = title if title else f'HRF-convolved task regressors  ({n_cond} condition(s))'
+    axes[0, 0].set_title(_title, fontsize=11, pad=8)
+
+    plt.tight_layout()
+    return fig
+
+
+@_register
+def plot_gppi_design_matrix(design_matrix, col_names, title=None, figsize=None):
+    """
+    Visualise a gPPI design matrix as a colour-coded heatmap.
+
+    Columns are grouped into four blocks and colour-coded in the column
+    header strip so you can immediately see the structure of the model:
+
+    * **Physiological** (seed time series) — blue
+    * **Psychological** (HRF-convolved task regressors) — green
+    * **PPI interaction** (seed × psychological) — orange
+    * **Nuisance + intercept** (confounds) — grey
+
+    Parameters
+    ----------
+    design_matrix : np.ndarray, shape (T, n_columns)
+        Design matrix from ``build_gppi_design()``.
+
+    col_names : list of str
+        Column names of length ``n_columns``, as returned by
+        ``build_gppi_design()``.
+
+    title : str or None
+        Figure title.  If ``None``, a generic title is used.
+
+    figsize : tuple or None
+        Figure size in inches ``(width, height)``.  If ``None``, width
+        scales with number of columns and height is fixed at 6.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> D, names, ppi_idx = build_gppi_design(seed_ts, hrf_regressors, confounds)
+    >>> fig = plot_gppi_design_matrix(D, names,
+    ...           title='Subject 01 — gPPI design matrix | seed ROI')
+    >>> plt.show()
+
+    Save:
+
+    >>> fig.savefig('./gppi_output/design_matrix.png', dpi=150,
+    ...             bbox_inches='tight')
+
+    See also
+    --------
+    build_gppi_design   : Produce design_matrix and col_names.
+    plot_hrf_regressors : Visualise individual HRF-convolved regressors.
+    """
+    n_cols = len(col_names)
+    if figsize is None:
+        figsize = (max(8, n_cols * 0.55 + 2), 6)
+
+    # ── Classify each column into one of four blocks ──────────────────────────
+    BLOCK_COLORS = {
+        'seed':   '#2D5FA8',   # blue   — physiological
+        'psych':  '#2D9B6F',   # green  — psychological
+        'ppi':    '#D97706',   # orange — PPI interaction
+        'nuisance': '#64748B', # grey   — confounds / intercept
+    }
+
+    def _block(name):
+        if name == 'seed':                  return 'seed'
+        if name.startswith('psych_'):       return 'psych'
+        if name.startswith('ppi_'):         return 'ppi'
+        return 'nuisance'
+
+    blocks  = [_block(n) for n in col_names]
+    hcolors = [BLOCK_COLORS[b] for b in blocks]
+
+    # ── Z-score each column for display (so amplitudes are comparable) ────────
+    dm_display = design_matrix.copy().astype(float)
+    col_std    = dm_display.std(axis=0)
+    col_std[col_std == 0] = 1.0
+    dm_display = (dm_display - dm_display.mean(axis=0)) / col_std
+
+    # ── Figure layout: colour header strip + heatmap ──────────────────────────
+    fig = plt.figure(figsize=figsize)
+    gs  = fig.add_gridspec(
+        2, 1,
+        height_ratios = [0.06, 1],
+        hspace        = 0.02,
+    )
+    ax_hdr = fig.add_subplot(gs[0])
+    ax_dm  = fig.add_subplot(gs[1])
+
+    # Colour header — one patch per column
+    for j, color in enumerate(hcolors):
+        ax_hdr.add_patch(
+            plt.Rectangle((j, 0), 1, 1,
+                           color=color, transform=ax_hdr.transData)
+        )
+    ax_hdr.set_xlim(0, n_cols)
+    ax_hdr.set_ylim(0, 1)
+    ax_hdr.axis('off')
+
+    # Legend for the four blocks
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor=BLOCK_COLORS['seed'],     label='Physiological (seed)'),
+        Patch(facecolor=BLOCK_COLORS['psych'],    label='Psychological (HRF)'),
+        Patch(facecolor=BLOCK_COLORS['ppi'],      label='PPI interaction'),
+        Patch(facecolor=BLOCK_COLORS['nuisance'], label='Nuisance / intercept'),
+    ]
+    ax_hdr.legend(
+        handles    = legend_elements,
+        loc        = 'upper left',
+        ncol       = 4,
+        fontsize   = 7.5,
+        frameon    = False,
+        bbox_to_anchor = (0, 2.6),
+    )
+
+    # Heatmap
+    im = ax_dm.imshow(
+        dm_display,
+        aspect     = 'auto',
+        cmap       = 'RdBu_r',
+        vmin       = -3, vmax = 3,
+        interpolation = 'nearest',
+    )
+    ax_dm.set_xticks(range(n_cols))
+    ax_dm.set_xticklabels(col_names, rotation=60, ha='right', fontsize=7.5)
+    ax_dm.set_ylabel('Time (volumes)', fontsize=9)
+    ax_dm.set_xlabel('Regressor', fontsize=9)
+
+    # Vertical dividers between blocks
+    prev_block = blocks[0]
+    for j, b in enumerate(blocks[1:], start=1):
+        if b != prev_block:
+            ax_dm.axvline(j - 0.5, color='white', lw=1.2, ls='--')
+            prev_block = b
+
+    plt.colorbar(im, ax=ax_dm, shrink=0.6, pad=0.01,
+                 label='Z-scored amplitude')
+
+    _title = title if title else f'gPPI design matrix  ({n_cols} columns)'
+    fig.suptitle(_title, fontsize=10, y=1.01)
+
+    plt.tight_layout()
+    return fig
+
+
+@_register
 def build_gppi_design(seed_ts, hrf_regressors, confounds=None):
     """
     Assemble the gPPI design matrix for a single seed ROI.
@@ -2170,13 +2429,13 @@ def build_gppi_design(seed_ts, hrf_regressors, confounds=None):
 def compute_gppi_matrix(time_series, events_df, t_r, confounds=None,
                          conditions=None, hrf_model='spm', fisher_z=False):
     """
-    Compute a full ROI × ROI generalised PPI connectivity matrix.
+    Compute a full ROI × ROI × condition generalised PPI connectivity matrix.
 
     For each seed ROI, fits an OLS general linear model with physiological
     (seed), psychological (HRF-convolved task), and PPI interaction
-    regressors against every target ROI simultaneously.  The gPPI
-    connectivity estimate is the sum of PPI beta coefficients across all
-    modelled conditions.
+    regressors against every target ROI simultaneously.  Each condition's
+    PPI beta is stored as a separate slice along the third dimension, so
+    condition-specific connectivity maps are preserved for group analysis.
 
     Parameters
     ----------
@@ -2210,10 +2469,14 @@ def compute_gppi_matrix(time_series, events_df, t_r, confounds=None,
 
     Returns
     -------
-    gppi_matrix : np.ndarray, shape (n_rois, n_rois)
-        gPPI connectivity matrix.  ``gppi_matrix[i, j]`` is the summed
-        PPI beta when ROI ``i`` is the seed and ROI ``j`` is the target.
-        Diagonal is set to 0.
+    gppi_matrix : np.ndarray, shape (n_rois, n_rois, n_conditions)
+        gPPI connectivity matrix.  ``gppi_matrix[i, j, k]`` is the PPI
+        beta for seed ROI ``i``, target ROI ``j``, and condition ``k``
+        (ordered as in ``conditions``).  Diagonals are set to 0.
+
+    conditions_out : list of str
+        Condition names corresponding to the third dimension, in the same
+        order as ``gppi_matrix[:, :, k]``.
 
     Notes
     -----
@@ -2224,23 +2487,35 @@ def compute_gppi_matrix(time_series, events_df, t_r, confounds=None,
     - ``np.linalg.lstsq(D, Y)`` solves all ``n_rois`` targets in a single
       call per seed, making the inner loop efficient.  Expect ~1–3 min for
       Schaefer-200 at 2 mm resolution.
+    - To collapse across conditions (e.g. for a task-general connectivity
+      map), sum or average the third dimension:
+      ``gppi_mean = gppi_matrix.mean(axis=2)``.
 
     Examples
     --------
     All conditions:
 
-    >>> gppi_mat = compute_gppi_matrix(ts, events_df, TR, confounds_array)
+    >>> gppi_mat, conds = compute_gppi_matrix(ts, events_df, TR, confounds_array)
+    >>> print(gppi_mat.shape)    # (n_rois, n_rois, n_conditions)
+    >>> print(conds)             # ['CONDITION_A', 'CONDITION_B']
 
-    Two specific conditions:
+    Access a specific condition by index:
 
-    >>> gppi_mat = compute_gppi_matrix(
-    ...     ts, events_df, TR, confounds_array,
-    ...     conditions=['CONDITION_A', 'CONDITION_B'],
-    ... )
+    >>> enc_matrix = gppi_mat[:, :, 0]   # first condition
 
-    Symmetrise for group analysis:
+    Access by condition name:
 
-    >>> gppi_sym = (gppi_mat + gppi_mat.T) / 2
+    >>> idx = conds.index('ENCODING')
+    >>> enc_matrix = gppi_mat[:, :, idx]
+
+    Summarise each condition:
+
+    >>> for k, cond in enumerate(conds):
+    ...     summarise_gppi(gppi_mat[:, :, k], label=cond)
+
+    Symmetrise one condition slice for group analysis:
+
+    >>> enc_sym = (enc_matrix + enc_matrix.T) / 2
 
     See also
     --------
@@ -2248,20 +2523,23 @@ def compute_gppi_matrix(time_series, events_df, t_r, confounds=None,
     load_events            : Produce the events_df argument.
     build_hrf_regressors   : Called internally.
     build_gppi_design      : Called internally for each seed.
-    save_fc_matrix         : Save the result as a labelled CSV.
+    summarise_gppi         : Print per-condition connectivity statistics.
+    save_fc_matrix         : Save one condition slice as a labelled CSV.
     plot_fc_matrix         : Plot the connectivity heatmap.
     plot_gppi_seed_profile : Inspect one seed's connection profile.
     """
     n_scans, n_rois = time_series.shape
 
     # Build HRF regressors once — same for every seed
-    hrf_regs     = build_hrf_regressors(events_df, t_r, n_scans,
-                                         conditions, hrf_model)
-    n_conditions = len(hrf_regs)
+    hrf_regs      = build_hrf_regressors(events_df, t_r, n_scans,
+                                          conditions, hrf_model)
+    conditions_out = list(hrf_regs.keys())
+    n_conditions   = len(conditions_out)
 
-    gppi_matrix = np.zeros((n_rois, n_rois))
+    # 3-D output: (n_rois, n_rois, n_conditions)
+    gppi_matrix = np.zeros((n_rois, n_rois, n_conditions))
 
-    print(f'  [gPPI] Computing {n_rois}×{n_rois} matrix '
+    print(f'  [gPPI] Computing {n_rois}×{n_rois}×{n_conditions} matrix '
           f'({n_conditions} condition(s)) …')
 
     for seed_idx in range(n_rois):
@@ -2272,13 +2550,16 @@ def compute_gppi_matrix(time_series, events_df, t_r, confounds=None,
         # OLS: D @ B ≈ Y  →  B shape (n_regressors, n_rois)
         B, _, _, _ = np.linalg.lstsq(D, time_series, rcond=None)
 
-        # Sum PPI betas across conditions for each target
-        gppi_matrix[seed_idx, :] = B[ppi_cols, :].sum(axis=0)
+        # Store each condition's beta as a separate slice (no summing)
+        for k, col in enumerate(ppi_cols):
+            gppi_matrix[seed_idx, :, k] = B[col, :]
 
         if (seed_idx + 1) % 25 == 0 or seed_idx == n_rois - 1:
             print(f'  [gPPI] {seed_idx + 1}/{n_rois} seeds complete …')
 
-    np.fill_diagonal(gppi_matrix, 0)
+    # Zero the diagonal of every condition slice
+    for k in range(n_conditions):
+        np.fill_diagonal(gppi_matrix[:, :, k], 0)
 
     if fisher_z:
         gppi_matrix = np.arctanh(np.clip(gppi_matrix, -1 + 1e-7, 1 - 1e-7))
@@ -2288,22 +2569,20 @@ def compute_gppi_matrix(time_series, events_df, t_r, confounds=None,
           f'(min={gppi_matrix.min():.4f}, max={gppi_matrix.max():.4f})')
 
     if _logger:
-        mask = np.ones_like(gppi_matrix, dtype=bool)
-        np.fill_diagonal(mask, False)
-        od = gppi_matrix[mask]
+        od = gppi_matrix[~np.eye(n_rois, dtype=bool), :]
         _logger.log_step(
             'compute_gppi_matrix',
-            matrix_shape = str(gppi_matrix.shape),
-            n_conditions = n_conditions,
-            conditions   = list(hrf_regs.keys()),
-            hrf_model    = hrf_model,
-            fisher_z     = fisher_z,
-            value_min    = round(float(od.min()), 4),
-            value_max    = round(float(od.max()), 4),
-            value_mean   = round(float(od.mean()), 4),
+            matrix_shape  = str(gppi_matrix.shape),
+            n_conditions  = n_conditions,
+            conditions    = conditions_out,
+            hrf_model     = hrf_model,
+            fisher_z      = fisher_z,
+            value_min     = round(float(od.min()), 4),
+            value_max     = round(float(od.max()), 4),
+            value_mean    = round(float(od.mean()), 4),
         )
 
-    return gppi_matrix
+    return gppi_matrix, conditions_out
 
 
 @_register
@@ -2385,4 +2664,1822 @@ def plot_gppi_seed_profile(gppi_matrix, labels, seed_label,
     ax.set_title(f'Top {n_top} gPPI connections\nSeed: {seed_label}',
                  fontsize=11)
     plt.tight_layout()
+    return fig
+
+
+@_register
+def summarise_gppi(gppi_matrix, label=None, n_top=5, threshold=0.0):
+    """
+    Print a concise text summary of a gPPI connectivity matrix.
+
+    Reports the matrix dimensions, the distribution of beta weights, and
+    the strongest positive and negative connections.  Useful for a quick
+    sanity check after ``compute_gppi_matrix()``.
+
+    Parameters
+    ----------
+    gppi_matrix : np.ndarray, shape (n_rois, n_rois)
+        A single-condition slice of the 3-D gPPI output, e.g.
+        ``gppi_matrix[:, :, idx]``.
+
+    label : str or None
+        Descriptive label printed in the header (e.g. subject / task /
+        condition string).  If ``None``, only the matrix shape is shown.
+
+    n_top : int
+        Number of strongest positive and negative edges to list.
+        Default: 5.
+
+    threshold : float
+        Edges with |beta| ≤ threshold are excluded from the top-N lists.
+        Default: 0.0 (all non-zero edges shown).
+
+    Returns
+    -------
+    stats : dict
+        Keys:
+        ``n_rois``, ``n_edges``, ``mean_beta``, ``std_beta``,
+        ``max_beta``, ``min_beta``, ``pct_positive``, ``pct_negative``.
+
+    Examples
+    --------
+    >>> stats = summarise_gppi(gppi_matrix[:, :, 0],
+    ...                        label='sub-01 | MemTask | ENCODING')
+    >>> print(stats['mean_beta'])
+
+    See also
+    --------
+    compute_gppi_matrix  : Produce the gPPI matrix.
+    plot_fc_matrix       : Visualise the full matrix as a heatmap.
+    plot_gppi_seed_profile : Bar chart of the strongest connections for one seed.
+    """
+    n_rois = gppi_matrix.shape[0]
+
+    # Extract upper triangle (unique off-diagonal edges)
+    triu_idx   = np.triu_indices(n_rois, k=1)
+    edge_vals  = gppi_matrix[triu_idx]
+    n_edges    = len(edge_vals)
+
+    # Exclude near-zero edges from top-N if threshold set
+    mask      = np.abs(edge_vals) > threshold
+    masked    = edge_vals[mask]
+
+    mean_beta = float(np.mean(edge_vals))
+    std_beta  = float(np.std(edge_vals))
+    max_beta  = float(np.max(edge_vals))
+    min_beta  = float(np.min(edge_vals))
+    pct_pos   = float(np.mean(edge_vals > 0) * 100)
+    pct_neg   = float(np.mean(edge_vals < 0) * 100)
+
+    # ── Print header ──────────────────────────────────────────────────────────
+    sep = '─' * 60
+    hdr = f'  gPPI summary | {label}' if label else f'  gPPI summary'
+    print(f'\n{sep}')
+    print(hdr)
+    print(sep)
+    print(f'  ROIs          : {n_rois}')
+    print(f'  Unique edges  : {n_edges}')
+    print(f'  Mean β        : {mean_beta:+.4f}')
+    print(f'  Std  β        : {std_beta:.4f}')
+    print(f'  Range β       : [{min_beta:+.4f}, {max_beta:+.4f}]')
+    print(f'  Positive edges: {pct_pos:.1f}%   |   Negative edges: {pct_neg:.1f}%')
+
+    # ── Top positive ──────────────────────────────────────────────────────────
+    pos_idx  = np.argsort(edge_vals)[::-1]
+    pos_idx  = [i for i in pos_idx if edge_vals[i] > threshold][:n_top]
+    if pos_idx:
+        print(f'\n  Top {n_top} positive edges (β):')
+        for rank, i in enumerate(pos_idx, 1):
+            r, c = triu_idx[0][i], triu_idx[1][i]
+            print(f'    {rank}. ROI[{r:3d}] ↔ ROI[{c:3d}]   β = {edge_vals[i]:+.4f}')
+
+    # ── Top negative ──────────────────────────────────────────────────────────
+    neg_idx  = np.argsort(edge_vals)
+    neg_idx  = [i for i in neg_idx if edge_vals[i] < -threshold][:n_top]
+    if neg_idx:
+        print(f'\n  Top {n_top} negative edges (β):')
+        for rank, i in enumerate(neg_idx, 1):
+            r, c = triu_idx[0][i], triu_idx[1][i]
+            print(f'    {rank}. ROI[{r:3d}] ↔ ROI[{c:3d}]   β = {edge_vals[i]:+.4f}')
+
+    print(sep + '\n')
+
+    stats = dict(
+        n_rois       = n_rois,
+        n_edges      = n_edges,
+        mean_beta    = mean_beta,
+        std_beta     = std_beta,
+        max_beta     = max_beta,
+        min_beta     = min_beta,
+        pct_positive = pct_pos,
+        pct_negative = pct_neg,
+    )
+    return stats
+
+
+# =============================================================================
+# Graph Theory
+# =============================================================================
+
+def _require_networkx():
+    if not _HAS_NETWORKX:
+        raise ImportError(
+            'networkx is not installed.  Run:  pip install networkx')
+
+
+def _network_from_label(label):
+    """Extract Yeo network name from a Schaefer parcel label.
+
+    Schaefer label format: ``7Networks_LH_Default_PFC_1``
+    Returns the network component (e.g. ``'Default'``) or ``'Unknown'``.
+    """
+    parts = label.split('_')
+    if len(parts) >= 3 and 'Networks' in parts[0]:
+        return parts[2]
+    return 'Unknown'
+
+
+@_register
+def threshold_proportional(fc_matrix, proportion=0.10, positive_only=True):
+    """
+    Threshold an FC matrix by keeping the strongest proportion of edges.
+
+    Edges are ranked by absolute weight.  Only the top ``proportion`` of
+    unique off-diagonal edges survive; all others are set to zero.
+
+    This proportional approach ensures that matrices with different raw
+    weight distributions are compared at the same *network density*, which
+    is important for valid cross-subject or cross-condition comparisons.
+
+    Parameters
+    ----------
+    fc_matrix : np.ndarray, shape (N, N)
+        Square symmetric connectivity matrix (Pearson r or Fisher z).
+
+    proportion : float
+        Fraction of edges to retain, between 0 and 1.  A value of 0.10
+        keeps the strongest 10 %% of possible connections.  Typical values
+        for resting-state FC are 0.05 – 0.25.
+
+    positive_only : bool
+        If True (default), negative-weight edges are removed before
+        ranking, so only positive connections survive.  Negative FC
+        values are often noisy or artefactual, particularly after global
+        signal regression.
+
+    Returns
+    -------
+    adj : np.ndarray, shape (N, N)
+        Thresholded adjacency matrix (same shape as input).  Self-loops
+        are zero.  The result is symmetric.
+
+    Notes
+    -----
+    - The diagonal is always zeroed before and after thresholding.
+    - If ``positive_only=True`` the effective density will be lower than
+      ``proportion`` when a substantial fraction of edges are negative.
+    - Use ``run_threshold_sweep`` to test sensitivity across multiple
+      sparsity levels before choosing a single threshold.
+
+    Examples
+    --------
+    >>> adj = threshold_proportional(fc_matrix, proportion=0.10)
+    >>> print(f'Density: {(adj > 0).sum() / (adj.shape[0]**2):.3f}')
+
+    See also
+    --------
+    run_threshold_sweep    : Sweep across multiple thresholds at once.
+    matrix_to_graph        : Convert the thresholded matrix to a NetworkX graph.
+    compute_graph_metrics  : Compute node and graph-level metrics.
+    """
+    mat = np.array(fc_matrix, dtype=float).copy()
+    np.fill_diagonal(mat, 0)
+    if positive_only:
+        mat[mat < 0] = 0
+
+    # Upper-triangle values only (avoid double-counting)
+    iu   = np.triu_indices_from(mat, k=1)
+    vals = mat[iu]
+    if positive_only:
+        vals = vals[vals > 0]
+    vals = vals[np.isfinite(vals)]
+
+    if len(vals) == 0:
+        return np.zeros_like(mat)
+
+    n_keep = max(1, int(np.floor(proportion * len(vals))))
+    cutoff = np.sort(vals)[-n_keep]
+
+    adj = np.where(mat >= cutoff, mat, 0.0)
+    adj = np.maximum(adj, adj.T)   # ensure symmetry
+    np.fill_diagonal(adj, 0)
+
+    n_nodes  = adj.shape[0]
+    n_edges  = int((adj > 0).sum() // 2)
+    density  = n_edges / (n_nodes * (n_nodes - 1) / 2)
+    print(f'  [threshold] proportion={proportion:.2f} | '
+          f'edges={n_edges} | density={density:.4f} | '
+          f'positive_only={positive_only}')
+    return adj
+
+
+@_register
+def matrix_to_graph(adj, labels):
+    """
+    Convert a thresholded adjacency matrix to a weighted NetworkX graph.
+
+    Each node receives two attributes: ``label`` (the ROI name from
+    ``labels``) and ``network`` (the Yeo network parsed from Schaefer
+    parcel labels, or ``'Unknown'`` for other atlases).
+
+    Parameters
+    ----------
+    adj : np.ndarray, shape (N, N)
+        Thresholded adjacency matrix produced by ``threshold_proportional``.
+        Edge weights are stored on the graph.
+
+    labels : list of str
+        Length-N list of parcel label strings.
+
+    Returns
+    -------
+    G : networkx.Graph
+        Undirected weighted graph with N nodes.  Node integers match row /
+        column indices of ``adj``.
+
+    Examples
+    --------
+    >>> adj = threshold_proportional(fc_matrix, proportion=0.10)
+    >>> G   = matrix_to_graph(adj, roi_labels)
+    >>> print(f'Nodes: {G.number_of_nodes()}  Edges: {G.number_of_edges()}')
+
+    See also
+    --------
+    threshold_proportional : Produce the ``adj`` argument.
+    compute_graph_metrics  : Compute metrics from the graph or adjacency matrix.
+    """
+    _require_networkx()
+    G = nx.from_numpy_array(adj)
+    attrs = {}
+    for i, lab in enumerate(labels):
+        attrs[i] = {'label': lab, 'network': _network_from_label(lab)}
+    nx.set_node_attributes(G, attrs)
+    return G
+
+
+@_register
+def compute_graph_metrics(adj, labels):
+    """
+    Compute node-level and graph-level metrics from a thresholded adjacency matrix.
+
+    **Node-level metrics** (one row per parcel):
+
+    - ``degree``      — number of connections
+    - ``strength``    — sum of edge weights (weighted degree)
+    - ``clustering``  — weighted clustering coefficient (Onnela et al.)
+    - ``betweenness`` — normalised betweenness centrality (unweighted paths)
+
+    **Graph-level metrics** (one row, returned as a dict):
+
+    - ``n_nodes``, ``n_edges``, ``density``
+    - ``mean_degree``, ``mean_strength``, ``mean_clustering``
+    - ``transitivity`` — ratio of triangles to connected triples
+    - ``avg_path_length`` — average shortest path in the largest component
+      (``np.nan`` if the largest component has only 1 node)
+    - ``n_components`` — number of connected components
+
+    Parameters
+    ----------
+    adj : np.ndarray, shape (N, N)
+        Thresholded adjacency matrix (output of ``threshold_proportional``).
+
+    labels : list of str
+        Length-N list of parcel label strings.
+
+    Returns
+    -------
+    node_df : pd.DataFrame, shape (N, 6+)
+        One row per parcel.  Columns: ``label``, ``network``, ``degree``,
+        ``strength``, ``clustering``, ``betweenness``.
+
+    graph_dict : dict
+        Graph-level summary metrics.
+
+    Notes
+    -----
+    - Betweenness centrality uses unweighted (hop-count) paths, consistent
+      with the convention that shorter paths in graph theory mean fewer hops,
+      not lower edge weights.
+    - Average path length is computed on the **largest connected component**
+      when the graph is not fully connected.  This avoids infinite paths
+      across disconnected components.
+
+    Examples
+    --------
+    >>> adj      = threshold_proportional(fc_matrix, proportion=0.10)
+    >>> node_df, graph_dict = compute_graph_metrics(adj, roi_labels)
+    >>> print(node_df[['label', 'degree', 'strength', 'clustering']].head())
+    >>> print(graph_dict)
+
+    See also
+    --------
+    threshold_proportional : Produce the ``adj`` argument.
+    run_threshold_sweep    : Compute metrics across multiple thresholds.
+    plot_node_metric_by_network : Visualise node metrics by Yeo network.
+    """
+    _require_networkx()
+    G = matrix_to_graph(adj, labels)
+
+    degree      = dict(G.degree())
+    strength    = dict(G.degree(weight='weight'))
+    clustering  = nx.clustering(G, weight='weight')
+    betweenness = nx.betweenness_centrality(G, weight=None, normalized=True)
+
+    node_df = pd.DataFrame({
+        'label'      : labels,
+        'network'    : [_network_from_label(l) for l in labels],
+        'degree'     : [degree.get(i, 0)      for i in range(len(labels))],
+        'strength'   : [strength.get(i, 0.0)  for i in range(len(labels))],
+        'clustering' : [clustering.get(i, 0.0) for i in range(len(labels))],
+        'betweenness': [betweenness.get(i, 0.0) for i in range(len(labels))],
+    })
+
+    # Graph-level metrics
+    if nx.is_connected(G):
+        avg_path = nx.average_shortest_path_length(G, weight=None)
+    else:
+        lcc = G.subgraph(max(nx.connected_components(G), key=len)).copy()
+        avg_path = (nx.average_shortest_path_length(lcc, weight=None)
+                    if lcc.number_of_nodes() > 1 else np.nan)
+
+    graph_dict = {
+        'n_nodes'       : G.number_of_nodes(),
+        'n_edges'       : G.number_of_edges(),
+        'density'       : nx.density(G),
+        'mean_degree'   : float(np.mean(list(degree.values()))),
+        'mean_strength' : float(np.mean(list(strength.values()))),
+        'mean_clustering': float(np.mean(list(clustering.values()))),
+        'transitivity'  : nx.transitivity(G),
+        'avg_path_length': avg_path,
+        'n_components'  : nx.number_connected_components(G),
+    }
+
+    print(f'  [graph] nodes={graph_dict["n_nodes"]} | '
+          f'edges={graph_dict["n_edges"]} | '
+          f'density={graph_dict["density"]:.4f} | '
+          f'mean_clustering={graph_dict["mean_clustering"]:.4f} | '
+          f'components={graph_dict["n_components"]}')
+
+    if _logger:
+        _logger.log_step('compute_graph_metrics', **graph_dict)
+
+    return node_df, graph_dict
+
+
+@_register
+def run_threshold_sweep(fc_matrix, labels,
+                        thresholds=(0.05, 0.10, 0.15, 0.20, 0.25),
+                        positive_only=True):
+    """
+    Compute graph metrics across a range of proportional thresholds.
+
+    Graph-theory conclusions should be stable across a reasonable range of
+    sparsity levels.  This function runs ``threshold_proportional`` and
+    ``compute_graph_metrics`` at each threshold and concatenates the results
+    into tidy DataFrames for inspection and plotting.
+
+    Parameters
+    ----------
+    fc_matrix : np.ndarray, shape (N, N)
+        Full FC matrix (unthresholded Pearson r or Fisher z).
+
+    labels : list of str
+        Length-N parcel label strings.
+
+    thresholds : tuple of float
+        Proportional thresholds to evaluate.  Default is
+        ``(0.05, 0.10, 0.15, 0.20, 0.25)``.
+
+    positive_only : bool
+        Passed to ``threshold_proportional``.  Default True.
+
+    Returns
+    -------
+    node_sweep : pd.DataFrame
+        Node-level metrics at every threshold.  Columns include
+        ``threshold``, ``label``, ``network``, ``degree``, ``strength``,
+        ``clustering``, ``betweenness``.
+
+    graph_sweep : pd.DataFrame
+        Graph-level metrics at every threshold.  One row per threshold.
+
+    Examples
+    --------
+    >>> node_sweep, graph_sweep = run_threshold_sweep(fc_matrix, roi_labels)
+    >>> print(graph_sweep[['threshold', 'density',
+    ...                     'mean_clustering', 'avg_path_length']])
+
+    See also
+    --------
+    threshold_proportional : Single-threshold version.
+    plot_threshold_sweep   : Visualise the sweep results.
+    """
+    node_rows  = []
+    graph_rows = []
+    for thr in thresholds:
+        adj = threshold_proportional(fc_matrix, proportion=thr,
+                                     positive_only=positive_only)
+        ndf, gdict = compute_graph_metrics(adj, labels)
+        ndf  = ndf.copy();  ndf['threshold']  = thr
+        gdict['threshold'] = thr
+        node_rows.append(ndf)
+        graph_rows.append(gdict)
+    node_sweep  = pd.concat(node_rows, ignore_index=True)
+    graph_sweep = pd.DataFrame(graph_rows)
+    return node_sweep, graph_sweep
+
+
+@_register
+def plot_threshold_sweep(graph_sweep,
+                         metrics=('density', 'mean_degree',
+                                  'mean_strength', 'mean_clustering',
+                                  'avg_path_length'),
+                         figsize=(8, 11)):
+    """
+    Plot graph-level metrics across a proportional threshold sweep.
+
+    Each panel shows how one graph metric changes as the network is made
+    sparser (higher threshold) or denser (lower threshold).  Stable metrics
+    across the sweep indicate that conclusions are robust to the choice of
+    threshold.
+
+    Parameters
+    ----------
+    graph_sweep : pd.DataFrame
+        Output of ``run_threshold_sweep``.  Must contain a ``threshold``
+        column and one column per metric in ``metrics``.
+
+    metrics : tuple of str
+        Graph-level metric column names to plot.  Any column present in
+        ``graph_sweep`` is valid.
+
+    figsize : tuple
+        Figure size in inches.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> node_sweep, graph_sweep = run_threshold_sweep(fc_matrix, roi_labels)
+    >>> fig = plot_threshold_sweep(graph_sweep)
+    >>> plt.show()
+
+    See also
+    --------
+    run_threshold_sweep : Produce the ``graph_sweep`` argument.
+    """
+    cols = [m for m in metrics if m in graph_sweep.columns]
+    fig, axes = plt.subplots(len(cols), 1, figsize=figsize, sharex=True)
+    if len(cols) == 1:
+        axes = [axes]
+    for ax, metric in zip(axes, cols):
+        ax.plot(graph_sweep['threshold'], graph_sweep[metric],
+                marker='o', lw=1.5, color='steelblue')
+        ax.set_ylabel(metric.replace('_', ' '), fontsize=9)
+        ax.grid(axis='y', lw=0.4, alpha=0.5)
+    axes[-1].set_xlabel('Proportional threshold', fontsize=10)
+    axes[0].set_title('Graph metrics across threshold sweep', fontsize=11)
+    plt.tight_layout()
+    return fig
+
+
+@_register
+def plot_node_metric_by_network(node_df, metric='strength',
+                                threshold=None, figsize=(9, 4),
+                                sort_by_value=True):
+    """
+    Bar chart of a node metric averaged by Yeo network.
+
+    Aggregates the chosen node-level metric across parcels within each
+    Yeo/Schaefer network and displays the mean as a horizontal bar.  Error
+    bars show ± 1 standard deviation across parcels in that network.
+
+    Parameters
+    ----------
+    node_df : pd.DataFrame
+        Output of ``compute_graph_metrics`` or a single-threshold slice of
+        ``run_threshold_sweep``.  Must contain ``network`` and ``metric``
+        columns.
+
+    metric : str
+        Column name of the node metric to plot.  Common choices:
+        ``'strength'``, ``'degree'``, ``'clustering'``, ``'betweenness'``.
+
+    threshold : float or None
+        If ``node_df`` is from ``run_threshold_sweep`` (which contains
+        multiple thresholds), pass the threshold value to filter to.
+        Leave as ``None`` if ``node_df`` already contains a single
+        threshold.
+
+    figsize : tuple
+        Figure size in inches.
+
+    sort_by_value : bool
+        If True (default), sort bars from highest to lowest mean value.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Examples
+    --------
+    Single threshold:
+
+    >>> adj      = threshold_proportional(fc_matrix, proportion=0.10)
+    >>> node_df, _ = compute_graph_metrics(adj, roi_labels)
+    >>> fig = plot_node_metric_by_network(node_df, metric='strength')
+
+    From a sweep:
+
+    >>> node_sweep, _ = run_threshold_sweep(fc_matrix, roi_labels)
+    >>> fig = plot_node_metric_by_network(
+    ...     node_sweep, metric='clustering', threshold=0.10)
+
+    See also
+    --------
+    compute_graph_metrics : Produce node_df for a single threshold.
+    run_threshold_sweep   : Produce node_df across thresholds.
+    plot_degree_distribution : Per-node degree histogram.
+    """
+    df = node_df.copy()
+    if threshold is not None and 'threshold' in df.columns:
+        df = df[df['threshold'] == threshold]
+
+    summary = (df.groupby('network')[metric]
+               .agg(['mean', 'std'])
+               .reset_index())
+    if sort_by_value:
+        summary = summary.sort_values('mean', ascending=False)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    bars = ax.bar(summary['network'], summary['mean'],
+                  yerr=summary['std'], capsize=4,
+                  color='steelblue', edgecolor='white', lw=0.5)
+    ax.set_ylabel(f'Mean {metric}', fontsize=10)
+    ax.set_title(
+        f'Mean node {metric} by Yeo network'
+        + (f'  (threshold = {threshold})' if threshold is not None else ''),
+        fontsize=11,
+    )
+    ax.tick_params(axis='x', rotation=35)
+    ax.grid(axis='y', lw=0.4, alpha=0.5)
+    plt.tight_layout()
+    return fig
+
+
+@_register
+def plot_degree_distribution(adj, bins=20, figsize=(7, 4)):
+    """
+    Plot the degree distribution of a thresholded graph.
+
+    The degree distribution describes how many connections each node has.
+    Scale-free networks show a heavy tail (few highly connected hubs);
+    random networks show a narrow Poisson-like distribution.  Comparing
+    the empirical distribution to a random graph null is a basic sanity
+    check for brain network analyses.
+
+    Parameters
+    ----------
+    adj : np.ndarray, shape (N, N)
+        Thresholded adjacency matrix (output of ``threshold_proportional``).
+
+    bins : int
+        Number of histogram bins.
+
+    figsize : tuple
+        Figure size in inches.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+    degrees : np.ndarray
+        Array of node degrees (length N).
+
+    Examples
+    --------
+    >>> adj = threshold_proportional(fc_matrix, proportion=0.10)
+    >>> fig, degrees = plot_degree_distribution(adj)
+    >>> print(f'Mean degree: {degrees.mean():.1f}  Max: {degrees.max()}')
+    >>> plt.show()
+
+    See also
+    --------
+    threshold_proportional     : Produce the ``adj`` argument.
+    plot_node_metric_by_network : Summarise by network.
+    """
+    _require_networkx()
+    G       = nx.from_numpy_array(adj)
+    degrees = np.array([d for _, d in G.degree()])
+    mean_k  = degrees.mean()
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.hist(degrees, bins=bins, color='steelblue', edgecolor='white', lw=0.5)
+    ax.axvline(mean_k, color='tomato', lw=1.5, ls='--',
+               label=f'Mean degree = {mean_k:.1f}')
+    ax.set_xlabel('Degree', fontsize=10)
+    ax.set_ylabel('Number of nodes', fontsize=10)
+    ax.set_title('Node degree distribution', fontsize=11)
+    ax.legend(fontsize=9)
+    plt.tight_layout()
+    return fig, degrees
+
+
+# =============================================================================
+# Group-Level FC Analysis
+# =============================================================================
+
+def _fdr_bh(pvals, alpha=0.05):
+    """Benjamini-Hochberg FDR correction (internal helper).
+
+    Parameters
+    ----------
+    pvals : array-like, shape (n,)
+        Raw p-values (will be flattened).
+    alpha : float
+        FDR level.
+
+    Returns
+    -------
+    reject : np.ndarray of bool, shape (n,)
+        True where the null hypothesis is rejected.
+    p_adj : np.ndarray of float, shape (n,)
+        BH-adjusted p-values (same order as input).
+    """
+    pv   = np.asarray(pvals, dtype=float).ravel()
+    n    = len(pv)
+    idx  = np.argsort(pv)               # ascending rank order
+    sp   = pv[idx]                       # sorted p-values
+    # Step-up adjusted p: p_adj(i) = min_{j>=i}( p(j) * n / j )
+    raw  = sp * n / np.arange(1, n + 1)
+    padj = np.minimum.accumulate(raw[::-1])[::-1]
+    padj = np.clip(padj, 0.0, 1.0)
+    rej  = padj <= alpha
+    # Restore original order
+    padj_out        = np.empty(n)
+    rej_out         = np.empty(n, dtype=bool)
+    padj_out[idx]   = padj
+    rej_out[idx]    = rej
+    return rej_out, padj_out
+
+
+@_register
+def load_group_matrices(matrix_paths, ref_labels=None):
+    """
+    Load multiple FC matrix CSVs into a single 3-D array.
+
+    Each CSV is expected to be a square, labelled matrix as written by
+    ``save_fc_matrix``: parcel names as both the row index and the column
+    header.  Labels are verified to be identical across subjects; a
+    ``ValueError`` is raised if they differ.
+
+    Parameters
+    ----------
+    matrix_paths : list of str or Path
+        Paths to individual-subject FC matrix CSVs, one per subject.
+
+    ref_labels : list of str or None
+        Expected parcel labels.  If None, the labels from the first file
+        are used as the reference and all subsequent files are checked
+        against them.
+
+    Returns
+    -------
+    matrices : np.ndarray, shape (n_subjects, N, N)
+        Stacked FC matrices (Fisher z or Pearson r, depending on what was
+        saved).
+    labels : list of str
+        Length-N parcel label strings (from the reference file).
+
+    Examples
+    --------
+    >>> paths = sorted(Path('matrices/').glob('sub-*_fc.csv'))
+    >>> matrices, labels = load_group_matrices(paths)
+    >>> print(matrices.shape)   # (n_subjects, N, N)
+
+    See also
+    --------
+    compute_group_mean_fc : Compute mean and SEM across subjects.
+    one_sample_ttest_fc   : Test whether each edge differs from zero.
+    """
+    paths = list(matrix_paths)
+    if len(paths) == 0:
+        raise ValueError('matrix_paths is empty.')
+
+    mats   = []
+    labels = ref_labels
+    for i, p in enumerate(paths):
+        df = pd.read_csv(p, index_col=0)
+        if labels is None:
+            labels = df.columns.tolist()
+        elif list(df.columns) != list(labels):
+            raise ValueError(
+                f'Label mismatch at file {i} ({Path(p).name}).\n'
+                f'  Expected first label: {labels[0]}\n'
+                f'  Got first label     : {df.columns[0]}')
+        mats.append(df.values.astype(float))
+
+    matrices = np.stack(mats, axis=0)
+    print(f'  [load_group_matrices] {len(paths)} subjects | '
+          f'matrix shape: {matrices.shape[1]}×{matrices.shape[2]}')
+    return matrices, labels
+
+
+@_register
+def compute_group_mean_fc(matrices, labels):
+    """
+    Compute the group mean and standard error of the FC matrix.
+
+    Parameters
+    ----------
+    matrices : np.ndarray, shape (n_subjects, N, N)
+        Stacked subject FC matrices from ``load_group_matrices``.
+
+    labels : list of str
+        Length-N parcel label strings.
+
+    Returns
+    -------
+    mean_mat : np.ndarray, shape (N, N)
+        Element-wise mean across subjects.
+    sem_mat : np.ndarray, shape (N, N)
+        Element-wise standard error of the mean (std / sqrt(n)).
+
+    Examples
+    --------
+    >>> mean_mat, sem_mat = compute_group_mean_fc(matrices, labels)
+    >>> print(f'Mean global FC: {np.nanmean(mean_mat):.3f}')
+
+    See also
+    --------
+    one_sample_ttest_fc : Statistical test for each edge.
+    plot_significant_fc : Visualise significant edges.
+    """
+    n        = matrices.shape[0]
+    mean_mat = matrices.mean(axis=0)
+    sem_mat  = matrices.std(axis=0, ddof=1) / np.sqrt(n)
+
+    global_mean = float(np.nanmean(mean_mat[np.triu_indices(len(labels), k=1)]))
+    print(f'  [group_mean_fc] n={n} | global mean FC={global_mean:.4f} | '
+          f'mean SEM={float(sem_mat.mean()):.4f}')
+
+    if _logger:
+        _logger.log_step('compute_group_mean_fc',
+                         n_subjects=n,
+                         global_mean_fc=round(global_mean, 4))
+    return mean_mat, sem_mat
+
+
+@_register
+def one_sample_ttest_fc(matrices, alpha=0.05):
+    """
+    Test whether each FC edge differs significantly from zero at the group level.
+
+    Runs a one-sample t-test (H₀: μ = 0) at every upper-triangle edge,
+    then applies Benjamini-Hochberg FDR correction across all edges to
+    control the false discovery rate.
+
+    Parameters
+    ----------
+    matrices : np.ndarray, shape (n_subjects, N, N)
+        Stacked subject FC matrices from ``load_group_matrices``.
+
+    alpha : float
+        FDR significance level.  Default 0.05.
+
+    Returns
+    -------
+    t_mat : np.ndarray, shape (N, N)
+        Symmetric matrix of t-statistics.
+    p_fdr_mat : np.ndarray, shape (N, N)
+        Symmetric matrix of BH-adjusted p-values.
+    sig_mask : np.ndarray of bool, shape (N, N)
+        True where the edge survives FDR correction.
+
+    Notes
+    -----
+    - The number of simultaneous tests is N*(N-1)/2 (one per unique edge).
+    - FDR controls the *expected proportion* of false discoveries among all
+      rejected hypotheses, making it less conservative than Bonferroni while
+      still controlling for multiple comparisons.
+    - For an additional cluster-level correction see ``network_based_stats``.
+
+    Examples
+    --------
+    >>> t_mat, p_fdr, sig = one_sample_ttest_fc(matrices, alpha=0.05)
+    >>> print(f'Significant edges: {sig.sum() // 2}')
+
+    See also
+    --------
+    two_sample_ttest_fc : Between-group edge comparison.
+    network_based_stats : Cluster-level (NBS) correction.
+    plot_significant_fc : Visualise the significant-edge mask.
+    """
+    from scipy.stats import t as _tdist
+    n_sub, N, _ = matrices.shape
+    iu = np.triu_indices(N, k=1)
+
+    mu   = matrices.mean(axis=0)
+    std  = matrices.std(axis=0, ddof=1)
+    sem  = std / np.sqrt(n_sub)
+    t_mat = np.where(sem > 0, mu / sem, 0.0)
+
+    p_mat = 2.0 * _tdist.sf(np.abs(t_mat), df=n_sub - 1)
+
+    # FDR on upper triangle only (avoid double-counting)
+    rej, p_fdr_up = _fdr_bh(p_mat[iu], alpha=alpha)
+
+    p_fdr_mat = np.ones((N, N))
+    sig_mask  = np.zeros((N, N), dtype=bool)
+    p_fdr_mat[iu]              = p_fdr_up
+    p_fdr_mat[(iu[1], iu[0])] = p_fdr_up
+    sig_mask[iu]               = rej
+    sig_mask[(iu[1], iu[0])]  = rej
+
+    n_sig   = int(rej.sum())
+    n_total = len(rej)
+    print(f'  [one_sample_ttest_fc] {n_sig}/{n_total} edges significant '
+          f'(FDR q<{alpha}; {100*n_sig/n_total:.1f}%)')
+
+    if _logger:
+        _logger.log_step('one_sample_ttest_fc',
+                         n_subjects=n_sub, alpha=alpha,
+                         n_edges_tested=n_total,
+                         n_significant=n_sig)
+    return t_mat, p_fdr_mat, sig_mask
+
+
+@_register
+def two_sample_ttest_fc(matrices_a, matrices_b, alpha=0.05):
+    """
+    Compare FC matrices between two groups at each edge (Welch's t-test + FDR).
+
+    For every upper-triangle edge, fits an independent-samples Welch's
+    t-test (unequal variance) and then applies Benjamini-Hochberg FDR
+    correction across all edges.  Positive t-values indicate group A > B.
+
+    Parameters
+    ----------
+    matrices_a : np.ndarray, shape (n_a, N, N)
+        FC matrices for group A (e.g. patients or condition 1).
+
+    matrices_b : np.ndarray, shape (n_b, N, N)
+        FC matrices for group B (e.g. controls or condition 2).
+
+    alpha : float
+        FDR significance level.  Default 0.05.
+
+    Returns
+    -------
+    t_mat : np.ndarray, shape (N, N)
+        Symmetric t-statistic matrix (A − B).
+    p_fdr_mat : np.ndarray, shape (N, N)
+        BH-adjusted p-values.
+    sig_mask : np.ndarray of bool, shape (N, N)
+        True where the edge survives FDR correction.
+
+    Examples
+    --------
+    >>> t_mat, p_fdr, sig = two_sample_ttest_fc(
+    ...     matrices_patients, matrices_controls, alpha=0.05)
+    >>> print(f'Stronger in patients: {(sig & (t_mat > 0)).sum() // 2} edges')
+    >>> print(f'Stronger in controls: {(sig & (t_mat < 0)).sum() // 2} edges')
+
+    See also
+    --------
+    one_sample_ttest_fc : Within-group test against zero.
+    network_based_stats : Cluster-level correction for two-group designs.
+    """
+    from scipy.stats import t as _tdist
+    a  = np.asarray(matrices_a, dtype=float)
+    b  = np.asarray(matrices_b, dtype=float)
+    na, N, _ = a.shape
+    nb       = b.shape[0]
+    iu       = np.triu_indices(N, k=1)
+
+    mu_a = a.mean(axis=0);  var_a = a.var(axis=0, ddof=1)
+    mu_b = b.mean(axis=0);  var_b = b.var(axis=0, ddof=1)
+
+    se    = np.sqrt(var_a / na + var_b / nb)
+    t_mat = np.where(se > 0, (mu_a - mu_b) / se, 0.0)
+
+    # Welch-Satterthwaite degrees of freedom
+    df_num = (var_a / na + var_b / nb) ** 2
+    df_den = ((var_a / na) ** 2 / (na - 1) +
+              (var_b / nb) ** 2 / (nb - 1))
+    df    = np.where(df_den > 0, df_num / df_den, 1.0)
+
+    p_mat = 2.0 * _tdist.sf(np.abs(t_mat), df=df)
+
+    rej, p_fdr_up = _fdr_bh(p_mat[iu], alpha=alpha)
+
+    p_fdr_mat = np.ones((N, N))
+    sig_mask  = np.zeros((N, N), dtype=bool)
+    p_fdr_mat[iu]              = p_fdr_up
+    p_fdr_mat[(iu[1], iu[0])] = p_fdr_up
+    sig_mask[iu]               = rej
+    sig_mask[(iu[1], iu[0])]  = rej
+
+    n_sig   = int(rej.sum())
+    n_total = len(rej)
+    pos     = int((rej & (t_mat[iu] > 0)).sum())
+    neg     = int((rej & (t_mat[iu] < 0)).sum())
+    print(f'  [two_sample_ttest_fc] n_A={na}  n_B={nb} | '
+          f'{n_sig}/{n_total} significant edges (FDR q<{alpha}) | '
+          f'A>B: {pos}  B>A: {neg}')
+
+    if _logger:
+        _logger.log_step('two_sample_ttest_fc',
+                         n_a=na, n_b=nb, alpha=alpha,
+                         n_edges_tested=n_total,
+                         n_significant=n_sig,
+                         edges_a_gt_b=pos, edges_b_gt_a=neg)
+    return t_mat, p_fdr_mat, sig_mask
+
+
+@_register
+def network_based_stats(matrices_a, matrices_b, threshold=3.0,
+                         alpha=0.05, n_perm=1000, seed=42):
+    """
+    Network-Based Statistics (NBS) for two-group connectome comparisons.
+
+    NBS is a cluster-level correction that controls the family-wise error
+    rate (FWER) over connected components of the thresholded t-statistic
+    matrix.  It is the connectome analog of cluster-extent correction in
+    mass-univariate neuroimaging (Zalesky et al., *NeuroImage*, 2010).
+
+    **Algorithm**
+
+    1. Compute Welch's t-statistic at each edge (A − B).
+    2. Apply a primary threshold (``|t| ≥ threshold``) to form a
+       binary suprathreshold graph.
+    3. Identify connected components of that graph; record their sizes.
+    4. Permute group labels ``n_perm`` times; repeat steps 2–3 and
+       record the maximum component size in each permutation.
+    5. A component is significant if its size exceeds the
+       (1 − alpha) percentile of the permutation null distribution.
+
+    Parameters
+    ----------
+    matrices_a : np.ndarray, shape (n_a, N, N)
+        FC matrices for group A.
+
+    matrices_b : np.ndarray, shape (n_b, N, N)
+        FC matrices for group B.
+
+    threshold : float
+        Primary t-statistic threshold.  A common choice is 3.0 (≈ p < .001
+        uncorrected).  Higher values → smaller, more specific components.
+
+    alpha : float
+        FWER level for the permutation test.  Default 0.05.
+
+    n_perm : int
+        Number of permutations.  At least 1000 recommended for reliable
+        p-values; 5000 for publication.
+
+    seed : int
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    sig_mask : np.ndarray of bool, shape (N, N)
+        True for edges belonging to a significant NBS component.
+
+    component_sizes : list of int
+        Number of *nodes* in each observed suprathreshold component
+        (sorted descending).
+
+    null_max : np.ndarray, shape (n_perm,)
+        Maximum component size from each permutation (the null distribution).
+
+    Notes
+    -----
+    - NBS is designed for two-group comparisons.  For one-sample tests
+      (group mean vs zero), use ``one_sample_ttest_fc`` with FDR.
+    - The primary threshold is a sensitivity/specificity trade-off:
+      lower → more edges enter components but correction is harder;
+      higher → fewer edges, more specific components.
+
+    Examples
+    --------
+    >>> sig, sizes, null = network_based_stats(
+    ...     matrices_patients, matrices_controls,
+    ...     threshold=3.0, alpha=0.05, n_perm=1000)
+    >>> print(f'Significant edges: {sig.sum() // 2}')
+
+    See also
+    --------
+    two_sample_ttest_fc : FDR correction for the same two-group test.
+    plot_significant_fc : Visualise the significant-edge mask.
+    """
+    _require_networkx()
+    rng  = np.random.default_rng(seed)
+    a    = np.asarray(matrices_a, dtype=float)
+    b    = np.asarray(matrices_b, dtype=float)
+    na, N, _ = a.shape
+    nb       = b.shape[0]
+    iu       = np.triu_indices(N, k=1)
+    all_mats = np.concatenate([a, b], axis=0)
+
+    def _welch_t(mats):
+        aa, bb = mats[:na], mats[na:]
+        ma, mb = aa.mean(0), bb.mean(0)
+        va, vb = aa.var(0, ddof=1), bb.var(0, ddof=1)
+        se = np.sqrt(va / na + vb / nb)
+        return np.where(se > 0, (ma - mb) / se, 0.0)
+
+    def _max_component(t_full):
+        supr = np.abs(t_full[iu]) >= threshold
+        si, sj = iu[0][supr], iu[1][supr]
+        G = nx.Graph()
+        G.add_nodes_from(range(N))
+        G.add_edges_from(zip(si.tolist(), sj.tolist()))
+        comps = list(nx.connected_components(G))
+        return comps, [len(c) for c in comps]
+
+    # Observed
+    t_obs              = _welch_t(all_mats)
+    comps_obs, sizes_obs = _max_component(t_obs)
+
+    # Permutation null
+    null_max = np.zeros(n_perm, dtype=int)
+    for p in range(n_perm):
+        perm_mats = all_mats[rng.permutation(na + nb)]
+        _, s_perm = _max_component(_welch_t(perm_mats))
+        null_max[p] = max(s_perm) if s_perm else 0
+        if (p + 1) % 200 == 0:
+            print(f'  [NBS] permutation {p+1}/{n_perm} …', end='\r')
+    print()
+
+    crit = float(np.percentile(null_max, 100 * (1 - alpha)))
+
+    # Mark edges in significant components
+    sig_mask = np.zeros((N, N), dtype=bool)
+    sig_components = [(c, s) for c, s in zip(comps_obs, sizes_obs) if s > crit]
+    for comp, _ in sig_components:
+        comp = list(comp)
+        for u in comp:
+            for v in comp:
+                if u != v and all_mats[:na, u, v].mean() != 0:
+                    sig_mask[u, v] = True
+
+    n_sig_comp  = len(sig_components)
+    n_sig_edges = int(sig_mask[iu].sum())
+    print(f'  [NBS] primary threshold: |t|≥{threshold} | '
+          f'critical component size: {crit:.0f} nodes')
+    print(f'  [NBS] {n_sig_comp} significant component(s), '
+          f'{n_sig_edges} suprathreshold edges')
+
+    if _logger:
+        _logger.log_step('network_based_stats',
+                         threshold=threshold, alpha=alpha,
+                         n_perm=n_perm,
+                         n_sig_components=n_sig_comp,
+                         n_sig_edges=n_sig_edges,
+                         critical_size=round(crit, 1))
+
+    sizes_sorted = sorted(sizes_obs, reverse=True)
+    return sig_mask, sizes_sorted, null_max
+
+
+@_register
+def plot_significant_fc(mean_matrix, sig_mask, labels,
+                         title='Group FC', vmin=-1, vmax=1,
+                         cmap='RdBu_r', figsize=(13, 5)):
+    """
+    Plot the group mean FC matrix alongside a significance-masked version.
+
+    Two panels are shown side by side: the full (unmasked) group mean on
+    the left, and the same matrix with non-significant edges set to zero on
+    the right.  This makes it easy to see which edges survive correction.
+
+    Parameters
+    ----------
+    mean_matrix : np.ndarray, shape (N, N)
+        Group mean FC matrix from ``compute_group_mean_fc``.
+
+    sig_mask : np.ndarray of bool, shape (N, N)
+        Significance mask from ``one_sample_ttest_fc``,
+        ``two_sample_ttest_fc``, or ``network_based_stats``.
+
+    labels : list of str
+        Parcel label strings (used only for the axis tick count).
+
+    title : str
+        Figure suptitle.
+
+    vmin, vmax : float
+        Colour axis limits.  Default −1 to +1.
+
+    cmap : str
+        Matplotlib colormap.  Default ``'RdBu_r'``.
+
+    figsize : tuple
+        Figure size in inches.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> mean_mat, _ = compute_group_mean_fc(matrices, labels)
+    >>> _, _, sig   = one_sample_ttest_fc(matrices)
+    >>> fig = plot_significant_fc(mean_mat, sig, labels,
+    ...                            title='Group resting-state FC')
+    >>> plt.show()
+
+    See also
+    --------
+    one_sample_ttest_fc : Produce sig_mask for one-sample test.
+    two_sample_ttest_fc : Produce sig_mask for two-group test.
+    network_based_stats : NBS sig_mask.
+    """
+    n_sig = int(sig_mask[np.triu_indices(len(labels), k=1)].sum())
+
+    fig, axes = plt.subplots(1, 2, figsize=figsize,
+                              gridspec_kw={'wspace': 0.12})
+
+    for ax, mat, subtitle in [
+        (axes[0], mean_matrix,
+         'Group mean FC (all edges)'),
+        (axes[1], np.where(sig_mask, mean_matrix, 0.0),
+         f'FDR-significant edges only\n({n_sig} edges)'),
+    ]:
+        im = ax.imshow(mat, cmap=cmap, vmin=vmin, vmax=vmax, aspect='auto')
+        ax.set_title(subtitle, fontsize=10)
+        ax.set_xlabel('Node', fontsize=9)
+        ax.set_ylabel('Node', fontsize=9)
+        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+    fig.suptitle(title, fontsize=12)
+    plt.tight_layout()
+    return fig
+
+
+# =============================================================================
+# Group-Level Graph Theory
+# =============================================================================
+
+@_register
+def load_group_node_metrics(csv_paths, subject_ids=None):
+    """
+    Load node-metric CSVs from multiple subjects into a single DataFrame.
+
+    Each CSV is the ``node_df`` saved by the graph theory tutorial (columns:
+    ``label``, ``network``, ``degree``, ``strength``, ``clustering``,
+    ``betweenness``).  A ``subject`` column is prepended so that the
+    combined DataFrame can be grouped by subject or by parcel.
+
+    Parameters
+    ----------
+    csv_paths : list of str or Path
+        Paths to per-subject node metric CSV files (one per subject).
+
+    subject_ids : list of str or None
+        Subject identifiers to use as the ``subject`` column values.
+        If None, subjects are labelled ``'sub-01'``, ``'sub-02'``, etc.
+
+    Returns
+    -------
+    group_node_df : pd.DataFrame
+        Concatenated DataFrame with shape (n_subjects × N_ROIS, 7+).
+
+    Examples
+    --------
+    >>> paths = sorted(Path('graph_metrics/').glob('*_graph_metrics.csv'))
+    >>> group_df = load_group_node_metrics(paths)
+    >>> print(group_df.groupby('network')['strength'].mean())
+
+    See also
+    --------
+    ttest_node_metric            : Per-parcel t-test on node metrics.
+    plot_node_tstat_by_network   : Visualise t-statistics by network.
+    """
+    paths = list(csv_paths)
+    ids   = (subject_ids if subject_ids is not None
+             else [f'sub-{i+1:02d}' for i in range(len(paths))])
+    dfs = []
+    for sid, p in zip(ids, paths):
+        df = pd.read_csv(p)
+        df.insert(0, 'subject', sid)
+        dfs.append(df)
+    out = pd.concat(dfs, ignore_index=True)
+    n_sub = out['subject'].nunique()
+    n_row = len(out)
+    print(f'  [load_group_node_metrics] {n_sub} subjects | {n_row} rows | '
+          f'columns: {list(out.columns)}')
+    return out
+
+
+@_register
+def ttest_node_metric(group_node_df, metric='strength',
+                       popmean=0.0, alpha=0.05):
+    """
+    One-sample t-test per parcel for a node-level graph metric.
+
+    For each parcel, tests whether the group mean of ``metric`` differs
+    significantly from ``popmean`` (default 0).  BH FDR correction is
+    applied across all parcels.
+
+    This answers: *which specific nodes show significantly non-zero
+    strength / clustering / betweenness at the group level?*
+
+    Parameters
+    ----------
+    group_node_df : pd.DataFrame
+        Combined node metric DataFrame from ``load_group_node_metrics``.
+        Must contain columns ``'label'``, ``'network'``, and ``metric``.
+
+    metric : str
+        Node-level metric to test.  One of ``'degree'``, ``'strength'``,
+        ``'clustering'``, ``'betweenness'``.
+
+    popmean : float
+        Null hypothesis mean.  Default 0.
+
+    alpha : float
+        FDR significance level.  Default 0.05.
+
+    Returns
+    -------
+    results_df : pd.DataFrame
+        One row per parcel.  Columns: ``label``, ``network``, ``n``,
+        ``mean``, ``std``, ``t``, ``p_raw``, ``p_fdr``, ``significant``.
+
+    Examples
+    --------
+    >>> results = ttest_node_metric(group_df, metric='strength')
+    >>> print(results[results['significant']].sort_values('t', ascending=False).head(10))
+
+    See also
+    --------
+    load_group_node_metrics    : Load the input DataFrame.
+    plot_node_tstat_by_network : Visualise results by network.
+    """
+    from scipy.stats import ttest_1samp as _tt1
+
+    rows = []
+    for (label, net), grp in group_node_df.groupby(
+            ['label', 'network'], sort=False):
+        vals = grp[metric].dropna().values
+        if len(vals) < 2:
+            continue
+        t, p = _tt1(vals, popmean=popmean)
+        rows.append({'label': label, 'network': net,
+                     'n': len(vals), 'mean': vals.mean(),
+                     'std': vals.std(ddof=1), 't': t, 'p_raw': p})
+
+    res = pd.DataFrame(rows)
+    rej, p_fdr = _fdr_bh(res['p_raw'].values, alpha=alpha)
+    res['p_fdr']       = p_fdr
+    res['significant'] = rej
+
+    n_sig = int(rej.sum())
+    print(f'  [ttest_node_metric] metric={metric} | '
+          f'{n_sig}/{len(res)} parcels significant (FDR q<{alpha})')
+
+    if _logger:
+        _logger.log_step('ttest_node_metric',
+                         metric=metric, popmean=popmean, alpha=alpha,
+                         n_parcels=len(res), n_significant=n_sig)
+    return res
+
+
+@_register
+def permutation_test_global_metric(matrices, labels, metric_name,
+                                    threshold=0.10, n_perm=500, seed=42):
+    """
+    Test whether a group-mean graph metric exceeds a random-graph null.
+
+    For each permutation, generates an Erdős–Rényi random graph matched
+    to the observed network density, computes the graph metric, and builds
+    a null distribution.  The observed group mean is then compared to this
+    distribution.
+
+    This is the standard approach for assessing **small-world** properties:
+    brain networks are expected to show higher clustering coefficient and
+    comparable path length relative to matched random graphs.
+
+    Parameters
+    ----------
+    matrices : np.ndarray, shape (n_subjects, N, N)
+        Stacked FC matrices from ``load_group_matrices``.
+
+    labels : list of str
+        Length-N parcel label strings.
+
+    metric_name : str
+        Graph-level metric to test.  Must be a key returned by
+        ``compute_graph_metrics`` graph_dict:
+        ``'density'``, ``'mean_clustering'``, ``'mean_strength'``,
+        ``'transitivity'``, ``'avg_path_length'``, or ``'mean_degree'``.
+
+    threshold : float
+        Proportional threshold used when constructing each subject's graph.
+
+    n_perm : int
+        Number of random-graph permutations.  Default 500.
+        Use ≥1000 for publication-quality inference.
+
+    seed : int
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    obs_mean : float
+        Observed group-mean value of ``metric_name``.
+    obs_per_subject : list of float
+        Per-subject metric values (useful for confidence intervals).
+    null_dist : np.ndarray, shape (n_perm,)
+        Metric values from random graphs (the null distribution).
+    p_perm : float
+        Permutation p-value: proportion of null values ≥ obs_mean.
+
+    Notes
+    -----
+    - ``avg_path_length`` uses only the largest connected component and
+      can be slow for dense graphs.  Consider using ``mean_clustering``
+      for faster permutation runs.
+    - For the small-world coefficient σ = (C/C_rand) / (L/L_rand), run
+      this function separately for clustering and path length and divide.
+
+    Examples
+    --------
+    >>> obs, per_sub, null, p = permutation_test_global_metric(
+    ...     matrices, labels, 'mean_clustering', threshold=0.10, n_perm=500)
+    >>> print(f'Observed: {obs:.4f}  |  p (vs random) = {p:.4f}')
+
+    See also
+    --------
+    compute_graph_metrics : Compute the metric on a single subject.
+    run_threshold_sweep   : Metric stability across thresholds.
+    """
+    import contextlib, io
+    _require_networkx()
+    rng  = np.random.default_rng(seed)
+    mats = np.asarray(matrices, dtype=float)
+
+    # Observed: one value per subject
+    print(f'  [permutation] Computing observed {metric_name} …')
+    obs_per_subject = []
+    for mat in mats:
+        adj = threshold_proportional(mat, proportion=threshold,
+                                     positive_only=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            _, gd = compute_graph_metrics(adj, labels)
+        obs_per_subject.append(gd.get(metric_name, np.nan))
+    obs_mean = float(np.nanmean(obs_per_subject))
+
+    # Matched random-graph density from the first subject
+    adj0   = threshold_proportional(mats[0], proportion=threshold,
+                                    positive_only=True)
+    N      = adj0.shape[0]
+    p_rand = float((adj0 > 0).sum()) / (N * (N - 1))   # density
+
+    # Null distribution: Erdős–Rényi random graphs
+    print(f'  [permutation] Running {n_perm} random-graph permutations '
+          f'(N={N}, density≈{p_rand:.4f}) …')
+    null_dist = np.zeros(n_perm)
+    for i in range(n_perm):
+        G_r   = nx.erdos_renyi_graph(N, p_rand,
+                                     seed=int(rng.integers(1_000_000)))
+        adj_r = nx.to_numpy_array(G_r, dtype=float)
+        with contextlib.redirect_stdout(io.StringIO()):
+            _, gd = compute_graph_metrics(adj_r, labels)
+        null_dist[i] = gd.get(metric_name, np.nan)
+        if (i + 1) % 100 == 0:
+            print(f'  [permutation]   {i+1}/{n_perm}', end='\r')
+    print()
+
+    # One-tailed p: fraction of null ≥ observed
+    p_perm     = float(np.nanmean(null_dist >= obs_mean))
+    null_mean  = float(np.nanmean(null_dist))
+    null_std   = float(np.nanstd(null_dist))
+    print(f'  [permutation] Observed {metric_name:20s}: {obs_mean:.4f}')
+    print(f'  [permutation] Random null (mean±SD)   : '
+          f'{null_mean:.4f} ± {null_std:.4f}')
+    print(f'  [permutation] p (observed ≥ random)   : {p_perm:.4f}')
+
+    if _logger:
+        _logger.log_step('permutation_test_global_metric',
+                         metric_name=metric_name, threshold=threshold,
+                         n_perm=n_perm, obs_mean=round(obs_mean, 4),
+                         null_mean=round(null_mean, 4),
+                         p_perm=round(p_perm, 4))
+
+    return obs_mean, obs_per_subject, null_dist, p_perm
+
+
+@_register
+def plot_node_tstat_by_network(ttest_df, metric='strength',
+                                alpha=0.05, figsize=(11, 5)):
+    """
+    Two-panel figure: mean t-statistic and percentage of significant parcels
+    per Yeo network, after ``ttest_node_metric``.
+
+    The left panel shows the mean t-statistic across parcels in each
+    network (positive = above the null mean; red bars = below null).
+    The right panel shows the percentage of parcels in each network whose
+    FDR-adjusted p-value survives the significance threshold.
+
+    Parameters
+    ----------
+    ttest_df : pd.DataFrame
+        Output of ``ttest_node_metric``.  Must contain columns
+        ``'network'``, ``'t'``, ``'significant'``, ``'label'``.
+
+    metric : str
+        Metric label for the figure title (purely cosmetic).
+
+    alpha : float
+        Alpha level label for the right-panel title (purely cosmetic).
+
+    figsize : tuple
+        Figure size in inches.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> results = ttest_node_metric(group_df, metric='strength')
+    >>> fig = plot_node_tstat_by_network(results, metric='strength')
+    >>> plt.show()
+
+    See also
+    --------
+    ttest_node_metric : Produce the ttest_df argument.
+    """
+    net = (ttest_df
+           .groupby('network')
+           .agg(mean_t=('t', 'mean'),
+                n_sig =('significant', 'sum'),
+                n_tot =('label', 'count'))
+           .reset_index())
+    net['pct_sig'] = 100.0 * net['n_sig'] / net['n_tot']
+    net = net.sort_values('mean_t', ascending=False)
+
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+
+    # Left: mean t by network
+    colors = ['tomato' if t < 0 else 'steelblue' for t in net['mean_t']]
+    axes[0].bar(net['network'], net['mean_t'], color=colors, edgecolor='white')
+    axes[0].axhline(0, color='black', lw=0.8, ls='--')
+    axes[0].set_title(f'Mean t-statistic by network\n(metric: {metric})',
+                      fontsize=10)
+    axes[0].set_ylabel('Mean t', fontsize=9)
+    axes[0].tick_params(axis='x', rotation=40)
+    axes[0].grid(axis='y', lw=0.4, alpha=0.5)
+
+    # Right: % significant parcels
+    axes[1].bar(net['network'], net['pct_sig'],
+                color='steelblue', edgecolor='white')
+    axes[1].set_title(f'% significant parcels by network\n'
+                      f'(FDR q < {alpha})', fontsize=10)
+    axes[1].set_ylabel('% significant parcels', fontsize=9)
+    axes[1].tick_params(axis='x', rotation=40)
+    axes[1].set_ylim(0, 105)
+    axes[1].grid(axis='y', lw=0.4, alpha=0.5)
+
+    plt.tight_layout()
+    return fig
+
+
+# =============================================================================
+# GLM-based group FC statistics
+# =============================================================================
+
+@_register
+def glm_fc(matrices, design_matrix, contrast, alpha=0.05):
+    """
+    Mass-univariate OLS GLM across all FC edges with BH-FDR correction.
+
+    Fits Y = X @ beta + epsilon independently at every upper-triangle edge,
+    then tests the scalar contrast c'beta against zero using a t-statistic.
+    This unified framework handles one-sample tests, group comparisons,
+    continuous covariates, and any factorial design expressible as a design
+    matrix.
+
+    Parameters
+    ----------
+    matrices : np.ndarray, shape (n_subjects, N, N)
+        Stacked subject FC matrices from ``load_group_matrices``.
+
+    design_matrix : np.ndarray or pd.DataFrame, shape (n_subjects, n_regressors)
+        The GLM design matrix X.  Each row is one subject; each column is one
+        regressor.
+
+        *One-sample t-test* (test whether mean FC != 0):
+            X = np.ones((n, 1))
+            contrast = [1]
+
+        *Two-sample t-test* (group A=0, group B=1):
+            X = np.column_stack([np.ones(n), group_vec])
+            contrast = [0, 1]
+
+        *Continuous covariate* (e.g. age, symptom score):
+            X = np.column_stack([np.ones(n), covariate_z])
+            contrast = [0, 1]
+
+    contrast : array-like, shape (n_regressors,)
+        Contrast vector c.  The tested quantity is c @ beta.
+
+    alpha : float
+        FDR significance level (Benjamini-Hochberg).  Default 0.05.
+
+    Returns
+    -------
+    t_mat : np.ndarray, shape (N, N)
+        Symmetric matrix of contrast t-statistics.
+
+    p_fdr_mat : np.ndarray, shape (N, N)
+        Symmetric matrix of BH-adjusted p-values.
+
+    sig_mask : np.ndarray of bool, shape (N, N)
+        True where the edge survives FDR correction.
+
+    Examples
+    --------
+    One-sample:
+
+    >>> X = np.ones((n_subjects, 1))
+    >>> t, p, sig = glm_fc(matrices, X, contrast=[1])
+
+    Two-sample:
+
+    >>> X = np.column_stack([np.ones(n), group_labels])
+    >>> t, p, sig = glm_fc(matrices, X, contrast=[0, 1])
+
+    See also
+    --------
+    load_group_matrices : Load and stack individual-subject FC CSVs.
+    plot_significant_fc : Heatmap view of significant edges.
+    plot_chord_diagram  : Chord/ring diagram of significant edges.
+    """
+    from scipy.stats import t as _tdist
+
+    X   = np.array(design_matrix, dtype=float)
+    c   = np.array(contrast, dtype=float)
+    n_sub, N, _ = matrices.shape
+    n_reg = X.shape[1]
+    df    = n_sub - n_reg
+
+    if df <= 0:
+        raise ValueError(
+            f'Degrees of freedom = {df} (n_subjects={n_sub}, '
+            f'n_regressors={n_reg}). Add more subjects or reduce regressors.'
+        )
+    if X.shape[0] != n_sub:
+        raise ValueError(
+            f'design_matrix has {X.shape[0]} rows but matrices has '
+            f'{n_sub} subjects.'
+        )
+    if len(c) != n_reg:
+        raise ValueError(
+            f'contrast length {len(c)} != n_regressors {n_reg}.'
+        )
+
+    iu      = np.triu_indices(N, k=1)
+    n_edges = len(iu[0])
+
+    # Stack upper triangle: (n_sub, n_edges)
+    Y = matrices[:, iu[0], iu[1]]
+
+    # OLS solution
+    XtX_inv = np.linalg.inv(X.T @ X)       # (n_reg, n_reg)
+    beta    = XtX_inv @ (X.T @ Y)           # (n_reg, n_edges)
+
+    # Residual variance
+    resid  = Y - X @ beta
+    sigma2 = np.sum(resid ** 2, axis=0) / df   # (n_edges,)
+
+    # Contrast t-statistic
+    c_beta = c @ beta                       # (n_edges,)
+    c_var  = float(c @ XtX_inv @ c)        # scalar
+    se     = np.sqrt(np.maximum(sigma2 * c_var, 0.0))
+    t_vec  = np.where(se > 0, c_beta / se, 0.0)
+    p_vec  = 2.0 * _tdist.sf(np.abs(t_vec), df=df)
+
+    # BH-FDR on upper triangle
+    rej, p_fdr_vec = _fdr_bh(p_vec, alpha=alpha)
+
+    # Reconstruct symmetric (N, N) matrices
+    t_mat     = np.zeros((N, N))
+    p_fdr_mat = np.ones((N, N))
+    sig_mask  = np.zeros((N, N), dtype=bool)
+
+    t_mat[iu]              = t_vec
+    t_mat[(iu[1], iu[0])] = t_vec
+    p_fdr_mat[iu]              = p_fdr_vec
+    p_fdr_mat[(iu[1], iu[0])] = p_fdr_vec
+    sig_mask[iu]               = rej
+    sig_mask[(iu[1], iu[0])]   = rej
+
+    n_sig = int(rej.sum())
+    print(f'  [glm_fc] contrast={list(c)}  df={df}  '
+          f'{n_sig}/{n_edges} edges significant '
+          f'(FDR q<{alpha}, {100*n_sig/n_edges:.1f}%)')
+
+    if _logger:
+        _logger.log_step('glm_fc', n_subjects=n_sub, n_regressors=n_reg,
+                         contrast=list(c), alpha=alpha,
+                         n_edges_tested=n_edges, n_significant=n_sig)
+
+    return t_mat, p_fdr_mat, sig_mask
+
+
+@_register
+def plot_chord_diagram(sig_mask, labels, mean_matrix=None,
+                       title='Significant FC — Chord Diagram',
+                       positive_color='#D62728', negative_color='#1F77B4',
+                       figsize=(9, 9), output_path=None):
+    """
+    Draw a circular chord diagram of significant FC edges grouped by network.
+
+    Nodes are arranged on a ring, sorted and colour-coded by their resting-
+    state network (parsed from Schaefer-style labels).  Significant edges are
+    drawn as straight chords inside the ring, coloured by sign when a mean
+    matrix is supplied.
+
+    Parameters
+    ----------
+    sig_mask : np.ndarray of bool, shape (N, N)
+        Significance mask from ``glm_fc``, ``one_sample_ttest_fc``, etc.
+
+    labels : list of str, length N
+        Parcel label strings.  Schaefer labels (``7Networks_LH_Default_PFC_1``)
+        are parsed to extract the network name (``Default``).
+
+    mean_matrix : np.ndarray, shape (N, N) or None
+        Group mean FC matrix.  If supplied, chord colour encodes sign and
+        alpha/width scale with |mean FC|.  If None, chords are grey.
+
+    title : str
+        Figure title.
+
+    positive_color, negative_color : str
+        Colours for positive and negative significant edges.
+
+    figsize : tuple
+        Figure size in inches.
+
+    output_path : str or None
+        If provided, save the figure to this path.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> fig = plot_chord_diagram(sig_mask, labels, mean_matrix=mean_fc,
+    ...                          title='Group mean FC — significant edges')
+    >>> plt.show()
+
+    See also
+    --------
+    glm_fc             : Produce sig_mask.
+    plot_significant_fc : Heatmap view of the same mask.
+    """
+    import matplotlib.patches as mpatches
+
+    N  = len(labels)
+    iu = np.triu_indices(N, k=1)
+
+    # ── Network assignment ────────────────────────────────────────────────────
+    def _net(lbl):
+        parts = lbl.split('_')
+        if len(parts) >= 3 and 'Networks' in parts[0]:
+            return parts[2]
+        return parts[0]
+
+    node_nets   = [_net(l) for l in labels]
+    unique_nets = list(dict.fromkeys(node_nets))   # order-preserving
+
+    # Sort nodes so network blocks are contiguous on the ring
+    sort_order = sorted(range(N), key=lambda i: node_nets[i])
+    inv_order  = [0] * N
+    for pos, orig in enumerate(sort_order):
+        inv_order[orig] = pos
+
+    # ── Colour palette ────────────────────────────────────────────────────────
+    cmap_nets = plt.cm.get_cmap('Set2', max(len(unique_nets), 3))
+    net_color = {n: cmap_nets(i) for i, n in enumerate(unique_nets)}
+
+    # ── Angular geometry ──────────────────────────────────────────────────────
+    gap_frac   = 0.012                        # gap between network blocks (frac of 2pi)
+    total_gap  = gap_frac * 2 * np.pi * len(unique_nets)
+    arc_total  = 2 * np.pi - total_gap
+    arc_node   = arc_total / N
+
+    # Starting angle for each network block
+    net_start = {}
+    cursor    = 0.0
+    for net in unique_nets:
+        net_start[net] = cursor
+        n_in_net        = sum(1 for nn in node_nets if nn == net)
+        cursor         += arc_node * n_in_net + gap_frac * 2 * np.pi
+
+    # Mid-angle for each node
+    node_angle  = np.zeros(N)
+    net_counts  = {n: 0 for n in unique_nets}
+    for pos, orig in enumerate(sort_order):
+        net               = node_nets[orig]
+        node_angle[pos]   = net_start[net] + net_counts[net] * arc_node + arc_node / 2
+        net_counts[net]  += 1
+
+    R_node  = 1.00   # node ring
+    R_arc   = 1.07   # network arc band
+    R_lbl   = 1.20   # label radius
+
+    # ── Figure ────────────────────────────────────────────────────────────────
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.set_aspect('equal')
+    ax.set_xlim(-1.5, 1.5)
+    ax.set_ylim(-1.5, 1.5)
+    ax.axis('off')
+
+    n_sig_edges = int(sig_mask[iu].sum())
+
+    # Chords (drawn first, behind nodes)
+    for k in range(len(iu[0])):
+        i_orig, j_orig = int(iu[0][k]), int(iu[1][k])
+        if not sig_mask[i_orig, j_orig]:
+            continue
+
+        a_i = node_angle[inv_order[i_orig]]
+        a_j = node_angle[inv_order[j_orig]]
+        xi, yi = R_node * np.cos(a_i), R_node * np.sin(a_i)
+        xj, yj = R_node * np.cos(a_j), R_node * np.sin(a_j)
+
+        if mean_matrix is not None:
+            val  = float(mean_matrix[i_orig, j_orig])
+            col  = positive_color if val >= 0 else negative_color
+            alph = np.clip(0.12 + 0.55 * abs(val), 0, 0.85)
+            lw   = np.clip(0.25 + 1.50 * abs(val), 0.25, 2.5)
+        else:
+            col, alph, lw = '#888888', 0.25, 0.5
+
+        ax.plot([xi, xj], [yi, yj], color=col, alpha=alph,
+                linewidth=lw, zorder=1, solid_capstyle='round')
+
+    # Network arcs and node dots
+    for net in unique_nets:
+        members_pos = [inv_order[i] for i in range(N) if node_nets[i] == net]
+        if not members_pos:
+            continue
+        col = net_color[net]
+
+        a_s = node_angle[min(members_pos)] - arc_node / 2
+        a_e = node_angle[max(members_pos)] + arc_node / 2
+        theta = np.linspace(a_s, a_e, max(len(members_pos) * 3, 60))
+        ax.plot(R_arc * np.cos(theta), R_arc * np.sin(theta),
+                color=col, linewidth=6, solid_capstyle='butt', zorder=2)
+
+        for pos in members_pos:
+            a = node_angle[pos]
+            ax.scatter(R_node * np.cos(a), R_node * np.sin(a),
+                       s=14, color=col, zorder=4, linewidths=0)
+
+        # Label at midpoint of arc
+        a_mid = (a_s + a_e) / 2
+        lx, ly = R_lbl * np.cos(a_mid), R_lbl * np.sin(a_mid)
+        rot    = np.degrees(a_mid) % 360
+        if 90 < rot < 270:
+            rot += 180
+        ax.text(lx, ly, net, ha='center', va='center',
+                fontsize=7.5, fontweight='bold', color=col,
+                rotation=rot, rotation_mode='anchor', zorder=5)
+
+    # Edge colour legend
+    if mean_matrix is not None:
+        legend_handles = [
+            mpatches.Patch(color=positive_color, label='Positive FC'),
+            mpatches.Patch(color=negative_color, label='Negative FC'),
+        ]
+        ax.legend(handles=legend_handles, loc='lower right',
+                  bbox_to_anchor=(1.3, 0.0), fontsize=9, frameon=False)
+
+    ax.set_title(f'{title}\n({n_sig_edges // 2} significant edges)',
+                 fontsize=12, pad=14)
+    plt.tight_layout()
+
+    if output_path:
+        fig.savefig(output_path, dpi=150, bbox_inches='tight')
+        print(f'  [plot_chord_diagram] Saved -> {output_path}')
+
     return fig
