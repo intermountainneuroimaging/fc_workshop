@@ -1,0 +1,10 @@
+/scratch/alpine/amhe4269/openneuro/ds000224/derivatives/correlation_matrices/subject_avg/sub-MSC01.csv
+/scratch/alpine/amhe4269/openneuro/ds000224/derivatives/correlation_matrices/subject_avg/sub-MSC02.csv
+/scratch/alpine/amhe4269/openneuro/ds000224/derivatives/correlation_matrices/subject_avg/sub-MSC03.csv
+/scratch/alpine/amhe4269/openneuro/ds000224/derivatives/correlation_matrices/subject_avg/sub-MSC04.csv
+/scratch/alpine/amhe4269/openneuro/ds000224/derivatives/correlation_matrices/subject_avg/sub-MSC05.csv
+/scratch/alpine/amhe4269/openneuro/ds000224/derivatives/correlation_matrices/subject_avg/sub-MSC06.csv
+/scratch/alpine/amhe4269/openneuro/ds000224/derivatives/correlation_matrices/subject_avg/sub-MSC07.csv
+/scratch/alpine/amhe4269/openneuro/ds000224/derivatives/correlation_matrices/subject_avg/sub-MSC08.csv
+/scratch/alpine/amhe4269/openneuro/ds000224/derivatives/correlation_matrices/subject_avg/sub-MSC09.csv
+/scratch/alpine/amhe4269/openneuro/ds000224/derivatives/correlation_matrices/subject_avg/sub-MSC10.csv

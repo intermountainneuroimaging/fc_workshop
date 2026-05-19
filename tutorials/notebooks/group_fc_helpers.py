@@ -234,6 +234,7 @@ def load_fc_from_file_list(txt_path):
 
     matrices, ref_labels = [], None
     for p in paths:
+        print(p)
         if not p.exists():
             raise FileNotFoundError(f"FC matrix not found: {p}")
         df = pd.read_csv(p, index_col=0)
